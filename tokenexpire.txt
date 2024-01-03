@@ -1,0 +1,31 @@
+ # Function to authenticate and obtain an Azure access token
+function Get-AzureAccessToken {
+    # Your authentication code here
+    # This should return both the access token and the expiration time
+}
+
+# Get the initial access token and expiration time
+$tokenResponse = Get-AzureAccessToken
+$accessToken = $tokenResponse.access_token
+$expiresOnUnixTime = $tokenResponse.expires_on
+
+# Convert Unix timestamp to DateTime
+$expirationDateTime = [DateTimeOffset]::FromUnixTimeSeconds($expiresOnUnixTime).DateTime
+
+while ($true) {
+    $currentTime = Get-Date
+
+    # Check if the token is about to expire (e.g., within 5 minutes)
+    if ($currentTime.AddMinutes(5) -ge $expirationDateTime) {
+        # Renew the token
+        $tokenResponse = Get-AzureAccessToken
+        $accessToken = $tokenResponse.access_token
+        $expiresOnUnixTime = $tokenResponse.expires_on
+        $expirationDateTime = [DateTimeOffset]::FromUnixTimeSeconds($expiresOnUnixTime).DateTime
+    }
+
+    # Your long-running script logic here
+
+    # Pause for a short duration to avoid constant token checks
+    Start-Sleep -Seconds 30
+}
