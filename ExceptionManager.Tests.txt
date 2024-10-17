@@ -27,12 +27,14 @@ Describe 'ExceptionManager Module Tests' {
                     match_type = "OR"
                 }
                 spndeptid = "Dept001"
+                azurecontainerdeptid = "Dept001"
                 containertype = @("rg")
                 role = @("owner")
                 environment = "prod"
                 dynamic = $true
                 dynamic_scope = $false
                 exception_type = "dynamic"
+                expiration_date = "2024-12-31T23:59:59Z"
             }
 
             $result = Test-ExceptionSchema -Exception $validException
@@ -73,7 +75,7 @@ Describe 'ExceptionManager Module Tests' {
             $result | Should -Be $false
         }
 
-        It 'Should pass if both TakeAwayID and expiration_date are present' {
+        It 'Should pass if TakeAwayID and expiration_date are both present' {
             $validException = @{
                 spnname_patterns = @{
                     patterns = @("*prod*")
@@ -88,6 +90,46 @@ Describe 'ExceptionManager Module Tests' {
                 exception_type = "dynamic"
                 takeawayid = "TakeAway123"
                 expiration_date = "2024-12-31T23:59:59Z"
+            }
+
+            $result = Test-ExceptionSchema -Exception $validException
+            $result | Should -Be $true
+        }
+
+        It 'Should fail if SPNdeptID and AzureContainerDeptID do not match' {
+            $invalidException = @{
+                spnname_patterns = @{
+                    patterns = @("*prod*")
+                    match_type = "OR"
+                }
+                spndeptid = "Dept001"
+                azurecontainerdeptid = "Dept002"
+                containertype = @("rg")
+                role = @("owner")
+                environment = "prod"
+                dynamic = $true
+                dynamic_scope = $false
+                exception_type = "dynamic"
+            }
+
+            $result = Test-ExceptionSchema -Exception $invalidException
+            $result | Should -Be $false
+        }
+
+        It 'Should pass if SPNdeptID and AzureContainerDeptID match' {
+            $validException = @{
+                spnname_patterns = @{
+                    patterns = @("*prod*")
+                    match_type = "OR"
+                }
+                spndeptid = "Dept001"
+                azurecontainerdeptid = "Dept001"
+                containertype = @("rg")
+                role = @("owner")
+                environment = "prod"
+                dynamic = $true
+                dynamic_scope = $false
+                exception_type = "dynamic"
             }
 
             $result = Test-ExceptionSchema -Exception $validException
@@ -112,7 +154,8 @@ Describe 'ExceptionManager Module Tests' {
                           -Dynamic $true `
                           -DynamicScope $false `
                           -ExceptionType "dynamic" `
-                          -ExpirationDate (Get-Date).AddMonths(6)
+                          -ExpirationDate (Get-Date).AddMonths(6) `
+                          -AzureContainerDeptID "Dept001"
 
             # Verify the addition
             $updatedExceptions = Get-Exceptions
@@ -134,7 +177,8 @@ Describe 'ExceptionManager Module Tests' {
                           -Dynamic $true `
                           -DynamicScope $false `
                           -ExceptionType "dynamic" `
-                          -ExpirationDate (Get-Date).AddMonths(6)
+                          -ExpirationDate (Get-Date).AddMonths(6) `
+                          -AzureContainerDeptID "Dept001"
 
             { Add-Exception -SpnNamePatterns $spnNamePatterns `
                             -SPNDeptID "Dept001" `
@@ -144,7 +188,8 @@ Describe 'ExceptionManager Module Tests' {
                             -Dynamic $true `
                             -DynamicScope $false `
                             -ExceptionType "dynamic" `
-                            -ExpirationDate (Get-Date).AddMonths(6) } | Should -Throw "Duplicate exception found"
+                            -ExpirationDate (Get-Date).AddMonths(6) `
+                            -AzureContainerDeptID "Dept001" } | Should -Throw "Duplicate exception found"
         }
     }
 
@@ -165,6 +210,7 @@ Describe 'ExceptionManager Module Tests' {
                         dynamic = $true
                         dynamic_scope = $false
                         exception_type = "dynamic"
+                        azurecontainerdeptid = "Dept001"
                     }
                 )
             }
@@ -186,5 +232,4 @@ Describe 'ExceptionManager Module Tests' {
             { Save-Exceptions -ExceptionsList $exceptions } | Should -Throw
         }
     }
-
 }
