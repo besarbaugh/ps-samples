@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     This function validates that the given exception adheres to the required schema, checking for required fields, 
-    correct data types, and allowed values.
+    correct data types, and allowed values. It also checks that `SPNdeptID` and `azurecontainerdeptid` match if both are present.
 
 .PARAMETER Exception
     A hashtable representing the exception to validate.
@@ -62,10 +62,10 @@ function Test-ExceptionSchema {
         $validationErrors += "TakeAwayID is present, but expiration_date is missing."
     }
 
-    # Matching logic for SPNdeptID and AzureContainerDeptID
+    # If both SPNdeptID and azurecontainerdeptid are present, ensure they match
     if ($Exception.ContainsKey("spndeptid") -and $Exception.ContainsKey("azurecontainerdeptid")) {
         if ($Exception.spndeptid -ne $Exception.azurecontainerdeptid) {
-            $validationErrors += "SPNdeptID does not match AzureContainerDeptID."
+            $validationErrors += "SPNdeptID and AzureContainerDeptID do not match."
         }
     }
 
