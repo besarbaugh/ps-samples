@@ -56,7 +56,25 @@
         "expiration_date": {
             "type": "string",
             "format": "date-time"
+        },
+        "takeawayid": {
+            "type": "string"
+        },
+        "azurecontainerdeptid": {
+            "type": "string"
         }
     },
-    "required": ["spnname_patterns", "SPNdeptID", "containertype", "role", "environment", "dynamic", "dynamic_scope", "exception_type"]
+    "required": [
+        "spnname_patterns", 
+        "SPNdeptID", 
+        "containertype", 
+        "role", 
+        "environment", 
+        "dynamic", 
+        "dynamic_scope", 
+        "exception_type"
+    ],
+    "dependencies": {
+        "takeawayid": ["expiration_date"]
+    }
 }
