@@ -62,6 +62,13 @@ function Test-ExceptionSchema {
         $validationErrors += "TakeAwayID is present, but expiration_date is missing."
     }
 
+    # Matching logic for SPNdeptID and AzureContainerDeptID
+    if ($Exception.ContainsKey("spndeptid") -and $Exception.ContainsKey("azurecontainerdeptid")) {
+        if ($Exception.spndeptid -ne $Exception.azurecontainerdeptid) {
+            $validationErrors += "SPNdeptID does not match AzureContainerDeptID."
+        }
+    }
+
     # Enum validation for certain fields
     $validContainerTypes = @("rg", "sub", "mg")
     if ($Exception.containertype -and !($validContainerTypes -contains $Exception.containertype)) {
@@ -125,7 +132,8 @@ function Add-Exception {
         [bool]$DynamicScope,
         [Parameter(Mandatory = $true)]
         [string]$ExceptionType,
-        [datetime]$ExpirationDate = $null
+        [datetime]$ExpirationDate = $null,
+        [string]$AzureContainerDeptID = $null
     )
 
     try {
@@ -143,6 +151,7 @@ function Add-Exception {
             dynamic_scope    = $DynamicScope
             exception_type   = $ExceptionType
             expiration_date  = $ExpirationDate
+            azurecontainerdeptid = $AzureContainerDeptID
         }
 
         # Convert all keys to lowercase
