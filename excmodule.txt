@@ -1,0 +1,39 @@
+# Function to load exceptions from a JSON file
+function Load-Exceptions {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+    
+    try {
+        if (Test-Path $FilePath) {
+            $jsonContent = Get-Content -Path $FilePath -Raw
+            $exceptions = $jsonContent | ConvertFrom-Json
+            return $exceptions
+        } else {
+            throw "File not found: $FilePath"
+        }
+    } catch {
+        Write-Error "Failed to load exceptions from $FilePath. $_"
+    }
+}
+
+# Function to validate an exception based on a manual schema
+function Validate-ExceptionSchema {
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Exception
+    )
+
+    $validationErrors = @()
+
+    # Required field check
+    if (-not $Exception.ContainsKey("spnname_patterns")) {
+        $validationErrors += "Missing required field: spnname_patterns."
+    }
+    if (-not $Exception.ContainsKey("SPNdeptID")) {
+        $validationErrors += "Missing required field: SPNdeptID."
+    }
+    if (-not $Exception.ContainsKey("containertype")) {
+        $validationErrors += "Missing required field: containertype."
+   
