@@ -1,5 +1,23 @@
-# Function to load exceptions from a JSON file
-function Load-Exceptions {
+# Function: Get-Exceptions
+<#
+.SYNOPSIS
+    Retrieves exceptions from a JSON file.
+
+.DESCRIPTION
+    This function reads a JSON file containing exception details and converts it into a PowerShell object.
+
+.PARAMETER FilePath
+    The full path to the exceptions JSON file.
+
+.EXAMPLE
+    PS C:\> $exceptions = Get-Exceptions -FilePath "C:\path\to\exceptions.json"
+
+    Retrieves exceptions from the specified JSON file and stores them in $exceptions.
+
+.NOTES
+    Ensure the JSON file is properly formatted.
+#>
+function Get-Exceptions {
     param (
         [Parameter(Mandatory = $true)]
         [string]$FilePath
@@ -14,12 +32,32 @@ function Load-Exceptions {
             throw "File not found: $FilePath"
         }
     } catch {
-        Write-Error "Failed to load exceptions from $FilePath. $_"
+        Write-Error "Failed to get exceptions from $FilePath: $_"
+        return $null
     }
 }
 
-# Function to validate an exception based on a manual schema
-function Validate-ExceptionSchema {
+# Function: Test-ExceptionSchema
+<#
+.SYNOPSIS
+    Validates an exception against the predefined schema.
+
+.DESCRIPTION
+    This function validates that the given exception adheres to the required schema, checking for required fields, 
+    correct data types, and allowed values.
+
+.PARAMETER Exception
+    A hashtable representing the exception to validate.
+
+.EXAMPLE
+    PS C:\> Test-ExceptionSchema -Exception $newException
+
+    Validates the $newException object against the schema.
+
+.NOTES
+    Returns $true if validation passes, $false otherwise.
+#>
+function Test-ExceptionSchema {
     param (
         [Parameter(Mandatory = $true)]
         [hashtable]$Exception
@@ -36,7 +74,120 @@ function Validate-ExceptionSchema {
     }
     if (-not $Exception.ContainsKey("containertype")) {
         $validationErrors += "Missing required field: containertype."
+    }
+    if (-not $Exception.ContainsKey("role")) {
+        $validationErrors += "Missing required field: role."
+    }
+    if (-not $Exception.ContainsKey("environment")) {
+        $validationErrors += "Missing required field: environment."
+    }
+    if (-not $Exception.ContainsKey("dynamic")) {
+        $validationErrors += "Missing required field: dynamic."
+    }
+    if (-not $Exception.ContainsKey("dynamic_scope")) {
+        $validationErrors += "Missing required field: dynamic_scope."
+    }
+    if (-not $Exception.ContainsKey("exception_type")) {
+        $validationErrors += "Missing required field: exception_type."
+    }
 
+    # Field type validation
+    if ($Exception.SPNdeptID -and -not ($Exception.SPNdeptID -is [string])) {
+        $validationErrors += "Field SPNdeptID must be a string."
+    }
+    if ($Exception.containertype -and -not ($Exception.containertype -is [array])) {
+        $validationErrors += "Field containertype must be an array."
+    }
+    if ($Exception.role -and -not ($Exception.role -is [array])) {
+        $validationErrors += "Field role must be an array."
+    }
+    if ($Exception.environment -and -not ($Exception.environment -is [string])) {
+        $validationErrors += "Field environment must be a string."
+    }
+    if ($Exception.dynamic -and -not ($Exception.dynamic -is [boolean])) {
+        $validationErrors += "Field dynamic must be a boolean."
+    }
+    if ($Exception.dynamic_scope -and -not ($Exception.dynamic_scope -is [boolean])) {
+        $validationErrors += "Field dynamic_scope must be a boolean."
+    }
+    if ($Exception.exception_type -and -not ($Exception.exception_type -is [string])) {
+        $validationErrors += "Field exception_type must be a string."
+    }
+
+    # Enum validation for certain fields
+    $validContainerTypes = @("RG", "sub", "MG")
+    if ($Exception.containertype -and !($validContainerTypes -contains $Exception.containertype)) {
+        $validationErrors += "Field containertype contains invalid values. Allowed values are 'RG', 'sub', 'MG'."
+    }
+
+    $validRoles = @("UAA", "owner", "contributor")
+    if ($Exception.role -and !($validRoles -contains $Exception.role)) {
+        $validationErrors += "Field role contains invalid values. Allowed values are 'UAA', 'owner', 'contributor'."
+    }
+
+    $validEnvironments = @("Prod", "QA", "UAT", "Dev")
+    if ($Exception.environment -and !($validEnvironments -contains $Exception.environment)) {
+        $validationErrors += "Field environment contains invalid values. Allowed values are 'Prod', 'QA', 'UAT', 'Dev'."
+    }
+
+    # Return validation results
+    if ($validationErrors.Count -eq 0) {
+        Write-Host "Validation passed."
+        return $true
+    } else {
+        Write-Host "Validation failed with errors:"
+        $validationErrors | ForEach-Object { Write-Host $_ }
+        return $false
+    }
+}
+
+# Function: Add-Exception
+<#
+.SYNOPSIS
+    Adds a new exception to the main exceptions.json file.
+
+.DESCRIPTION
+    This function validates a new exception and adds it to the specified exceptions.json file. It performs validation,
+    duplicate checks, and saves the new exception to the file if it passes validation.
+
+.PARAMETER SpnNamePatterns
+    A hashtable defining the SPN name patterns.
+
+.PARAMETER SPNDeptID
+    The department ID of the service principal.
+
+.PARAMETER ContainerTypes
+    An array of container types (e.g., 'RG', 'sub', 'MG').
+
+.PARAMETER Roles
+    An array of roles (e.g., 'UAA', 'owner', 'contributor').
+
+.PARAMETER Environment
+    The environment for the exception (e.g., 'Prod', 'QA').
+
+.PARAMETER Dynamic
+    Indicates if the exception is dynamic.
+
+.PARAMETER DynamicScope
+    Indicates if the exception has dynamic scope.
+
+.PARAMETER ExceptionType
+    The type of exception (e.g., 'dynamic', 'permanent').
+
+.PARAMETER ExpirationDate
+    The expiration date for temporary exceptions.
+
+.PARAMETER FilePath
+    The path to the exceptions.json file.
+
+.EXAMPLE
+    PS C:\> Add-Exception -SpnNamePatterns $spnNamePatterns -SPNDeptID "Dept001" -ContainerTypes @("RG", "sub") -Roles @("owner") -Environment "Prod" -Dynamic $true -DynamicScope $false -ExceptionType "dynamic" -ExpirationDate (Get-Date).AddMonths(6) -FilePath "C:\path\to\exceptions.json"
+
+    Adds a new exception to the exceptions.json file after validation and duplicate checks.
+
+.NOTES
+    Ensure the JSON file is properly formatted and valid for reading/writing.
+#>
 function Add-Exception {
     [CmdletBinding()]
     param (
@@ -119,4 +270,44 @@ function Add-Exception {
     }
 }
 
-   
+# Function: Save-Exceptions
+<#
+.SYNOPSIS
+    Saves the updated exceptions list to a JSON file.
+
+.DESCRIPTION
+    This function takes a hashtable of exceptions and writes it to the specified JSON file.
+
+.PARAMETER ExceptionsList
+    The hashtable containing the updated exceptions list.
+
+.PARAMETER FilePath
+    The full path to the JSON file where the exceptions should be saved.
+
+.EXAMPLE
+    PS C:\> Save-Exceptions -ExceptionsList $exceptions -FilePath "C:\path\to\exceptions.json"
+
+    Saves the exceptions list to the specified JSON file.
+
+.NOTES
+    Ensure the file is accessible and writable before using this function.
+#>
+function Save-Exceptions {
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$ExceptionsList,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+    
+    try {
+        $jsonContent = $ExceptionsList | ConvertTo-Json -Depth 10
+        $jsonContent | Out-File -FilePath $FilePath -Force
+    } catch {
+        Write-Error "Failed to save exceptions to $FilePath: $_"
+    }
+}
+
+# Export module functions
+Export-ModuleMember -Function Get-Exceptions, Test-ExceptionSchema, Add-Exception, Save-Exceptions
