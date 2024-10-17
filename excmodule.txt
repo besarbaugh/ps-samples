@@ -1,38 +1,3 @@
-# Function: Get-Exceptions
-<#
-.SYNOPSIS
-    Retrieves exceptions from the exceptions.json file in the root of the repo.
-
-.DESCRIPTION
-    This function reads a JSON file containing exception details and converts it into a PowerShell object.
-
-.EXAMPLE
-    PS C:\> $exceptions = Get-Exceptions
-
-    Retrieves exceptions from the `exceptions.json` file located in the root of the repo.
-
-.NOTES
-    Ensure the JSON file is properly formatted and exists in the root directory.
-#>
-function Get-Exceptions {
-    # Set the path to exceptions.json in the root directory relative to script location
-    $FilePath = Join-Path $PSScriptRoot "..\exceptions.json"
-    
-    try {
-        if (Test-Path $FilePath) {
-            $jsonContent = Get-Content -Path $FilePath -Raw
-            $exceptions = $jsonContent | ConvertFrom-Json
-            # Ensure all keys are lowercase
-            return $exceptions | ForEach-Object { $_.PSObject.Properties.Name = $_.PSObject.Properties.Name.ToLower(); $_ }
-        } else {
-            throw "File not found: $FilePath"
-        }
-    } catch {
-        Write-Error "Failed to get exceptions from $FilePath : $_"
-        return $null
-    }
-}
-
 # Function: Test-ExceptionSchema
 <#
 .SYNOPSIS
@@ -40,7 +5,7 @@ function Get-Exceptions {
 
 .DESCRIPTION
     This function validates that the given exception adheres to the required schema, checking for required fields, 
-    correct data types, and allowed values. If `TakeAwayID` is present, it ensures `expiration_date` is also present.
+    correct data types, and allowed values.
 
 .PARAMETER Exception
     A hashtable representing the exception to validate.
@@ -90,29 +55,6 @@ function Test-ExceptionSchema {
     }
     if (-not $Exception.ContainsKey("exception_type")) {
         $validationErrors += "Missing required field: exception_type."
-    }
-
-    # Field type validation
-    if ($Exception.spndeptid -and -not ($Exception.spndeptid -is [string])) {
-        $validationErrors += "Field SPNdeptID must be a string."
-    }
-    if ($Exception.containertype -and -not ($Exception.containertype -is [array])) {
-        $validationErrors += "Field containertype must be an array."
-    }
-    if ($Exception.role -and -not ($Exception.role -is [array])) {
-        $validationErrors += "Field role must be an array."
-    }
-    if ($Exception.environment -and -not ($Exception.environment -is [string])) {
-        $validationErrors += "Field environment must be a string."
-    }
-    if ($Exception.dynamic -and -not ($Exception.dynamic -is [boolean])) {
-        $validationErrors += "Field dynamic must be a boolean."
-    }
-    if ($Exception.dynamic_scope -and -not ($Exception.dynamic_scope -is [boolean])) {
-        $validationErrors += "Field dynamic_scope must be a boolean."
-    }
-    if ($Exception.exception_type -and -not ($Exception.exception_type -is [string])) {
-        $validationErrors += "Field exception_type must be a string."
     }
 
     # If TakeAwayID is present, expiration_date must be present
