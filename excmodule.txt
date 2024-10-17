@@ -221,4 +221,95 @@ function Add-Exception {
             SPNdeptID        = $SPNDeptID
             containertype    = $ContainerTypes
             role             = $Roles
-          
+            environment      = $Environment
+            dynamic          = $Dynamic
+            dynamic_scope    = $DynamicScope
+            exception_type   = $ExceptionType
+            expiration_date  = $ExpirationDate
+        }
+
+        # Validate the new exception against the schema
+        if (-not (Test-ExceptionSchema -Exception $newException)) {
+            Write-Error "Validation failed. The exception could not be added."
+            return
+        }
+
+        # Load the existing exceptions from the JSON file
+        try {
+            $exceptions = Get-Exceptions -FilePath $FilePath
+        } catch {
+            Write-Error "Failed to load the exceptions file: $FilePath : $_"
+            return
+        }
+
+        # Check for duplicates
+        $duplicate = $exceptions.Exceptions | Where-Object {
+            $_.spnname_patterns.patterns -eq $SpnNamePatterns.patterns -and
+            $_.containertype -eq $ContainerTypes -and
+            $_.role -eq $Roles -and
+            $_.environment -eq $Environment
+        }
+
+        if ($duplicate) {
+            Write-Error "Duplicate exception found. No changes made."
+            return
+        }
+
+        # Add the new exception to the list
+        $exceptions.Exceptions += $newException
+
+        # Save the updated exceptions list to the JSON file
+        try {
+            Save-Exceptions -ExceptionsList $exceptions -FilePath $FilePath
+        } catch {
+            Write-Error "Failed to save the updated exceptions file: $FilePath : $_"
+            return
+        }
+
+        Write-Host "New exception added successfully."
+    } catch {
+        Write-Error "An unexpected error occurred: $_"
+    }
+}
+
+# Function: Save-Exceptions
+<#
+.SYNOPSIS
+    Saves the updated exceptions list to a JSON file.
+
+.DESCRIPTION
+    This function takes a hashtable of exceptions and writes it to the specified JSON file.
+
+.PARAMETER ExceptionsList
+    The hashtable containing the updated exceptions list.
+
+.PARAMETER FilePath
+    The full path to the JSON file where the exceptions should be saved.
+
+.EXAMPLE
+    PS C:\> Save-Exceptions -ExceptionsList $exceptions -FilePath "C:\path\to\exceptions.json"
+
+    Saves the exceptions list to the specified JSON file.
+
+.NOTES
+    Ensure the file is accessible and writable before using this function.
+#>
+function Save-Exceptions {
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$ExceptionsList,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+    
+    try {
+        $jsonContent = $ExceptionsList | ConvertTo-Json -Depth 10
+        $jsonContent | Out-File -FilePath $FilePath -Force
+    } catch {
+        Write-Error "Failed to save exceptions to $FilePath : $_"
+    }
+}
+
+# Export module functions
+Export-ModuleMember -Function Get-Exceptions, Test-ExceptionSchema, Add-Exception, Save-Exceptions
