@@ -225,3 +225,129 @@
     }
   ]
 }
+
+function Load-Exceptions {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+    
+    try {
+        if (Test-Path $FilePath) {
+            $jsonContent = Get-Content -Path $FilePath -Raw
+            $exceptions = $jsonContent | ConvertFrom-Json
+            return $exceptions
+        } else {
+            throw "File not found: $FilePath"
+        }
+    } catch {
+        Write-Error "Failed to load exceptions from $FilePath. $_"
+    }
+}
+
+function Add-Exception {
+    [CmdletBinding(DefaultParameterSetName = 'SpnNamePattern')]
+    param (
+        # Parameter Set 1: SPN Name Patterns (mandatory)
+        [Parameter(Mandatory = $true, ParameterSetName = 'SpnNamePattern')]
+        [hashtable]$SpnNamePatterns,
+
+        # Parameter Set 2: SPN Object ID (optional for exact matches)
+        [Parameter(Mandatory = $false, ParameterSetName = 'SpnObjID')]
+        [string]$SpnObjID,
+
+        # Common Parameters
+        [Parameter(Mandatory = $true)]
+        [string]$SPNDeptID,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("RG", "sub", "MG")]
+        [array]$ContainerTypes,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("UAA", "owner", "contributor")]
+        [array]$Roles,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Prod", "QA", "UAT", "Dev")]
+        [string]$Environment,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$Dynamic,
+
+        [Parameter(Mandatory = $true)]
+        [bool]$DynamicScope,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("permanent", "dynamic")]
+        [string]$ExceptionType,
+
+        [datetime]$ExpirationDate = $null,
+
+        [Parameter(Mandatory = $true)]
+        [ref]$ExceptionsList
+    )
+
+    # Build the new exception object
+    $newException = @{
+        spnname_patterns = if ($SpnNamePatterns) { $SpnNamePatterns } else { $null }
+        spnobjtID        = if ($SpnObjID) { $SpnObjID } else { $null }
+        SPNdeptID        = $SPNDeptID
+        containertype    = $ContainerTypes
+        role             = $Roles
+        environment      = $Environment
+        dynamic          = $Dynamic
+        dynamic_scope    = $DynamicScope
+        exception_type   = $ExceptionType
+        expiration_date  = if ($ExceptionType -eq "dynamic") { $ExpirationDate } else { $null }
+    }
+    
+    # Add the new exception to the list
+    try {
+        $ExceptionsList.Value.Exceptions += $newException
+    } catch {
+        Write-Error "Failed to add the new exception: $_"
+    }
+}
+
+# Example usage
+$exceptions = Load-Exceptions -FilePath "C:\path\to\exceptions.json"
+
+$spnNamePatterns = @{
+    patterns = @("*service*", "*prod*")
+    match_type = "OR"
+}
+
+Add-Exception -SpnNamePatterns $spnNamePatterns `
+              -SPNDeptID "Dept001" `
+              -ContainerTypes @("RG", "sub") `
+              -Roles @("owner") `
+              -Environment "Prod" `
+              -Dynamic $true `
+              -DynamicScope $false `
+              -ExceptionType "dynamic" `
+              -ExpirationDate (Get-Date).AddMonths(6) `
+              -ExceptionsList ([ref]$exceptions)
+
+
+function Save-Exceptions {
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$ExceptionsList,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+    
+    try {
+        $jsonContent = $ExceptionsList | ConvertTo-Json -Depth 10
+        $jsonContent | Out-File -FilePath $FilePath -Force
+    } catch {
+        Write-Error "Failed to save exceptions to $FilePath. $_"
+    }
+}
+
+# Example usage
+Save-Exceptions -ExceptionsList $exceptions -FilePath "C:\path\to\exceptions.json"
+
+
