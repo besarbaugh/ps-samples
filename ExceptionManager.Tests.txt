@@ -72,6 +72,27 @@ Describe 'ExceptionManager Module Tests' {
             $result = Test-ExceptionSchema -Exception $invalidException
             $result | Should -Be $false
         }
+
+        It 'Should pass if both TakeAwayID and expiration_date are present' {
+            $validException = @{
+                spnname_patterns = @{
+                    patterns = @("*prod*")
+                    match_type = "OR"
+                }
+                spndeptid = "Dept001"
+                containertype = @("rg")
+                role = @("owner")
+                environment = "prod"
+                dynamic = $true
+                dynamic_scope = $false
+                exception_type = "dynamic"
+                takeawayid = "TakeAway123"
+                expiration_date = "2024-12-31T23:59:59Z"
+            }
+
+            $result = Test-ExceptionSchema -Exception $validException
+            $result | Should -Be $true
+        }
     }
 
     # Test for Add-Exception
