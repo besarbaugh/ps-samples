@@ -1,35 +1,104 @@
+# Import the module before running tests
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+Import-Module (Join-Path $scriptDir "..\modules\ExceptionManager.psm1")
+
+# Start the Pester test block
+Describe 'ExceptionManager Module Tests' {
+
+    # Test for Get-Exceptions
+    Describe 'Get-Exceptions' {
+        It 'Should return a hashtable from a valid file path' {
+            $exceptions = Get-Exceptions
+            $exceptions | Should -Not -BeNullOrEmpty
+            $exceptions | Should -BeOfType 'hashtable'
+        }
+
+        It 'Should throw an error if the file path does not exist' {
+            { Get-Exceptions } | Should -Throw "File not found"
+        }
+    }
+
+    # Test for Test-ExceptionSchema
+    Describe 'Test-ExceptionSchema' {
+        It 'Should return $true for a valid exception' {
+            $validException = @{
+                spnname_patterns = @{
+                    patterns = @("*prod*", "*service*")
+                    match_type = "OR"
+                }
+                spndeptid = "Dept001"
+                containertype = @("rg")
+                role = @("owner")
+                environment = "prod"
+                dynamic = $true
+                dynamic_scope = $false
+                exception_type = "dynamic"
+            }
+
+            $result = Test-ExceptionSchema -Exception $validException
+            $result | Should -Be $true
+        }
+
+        It 'Should return $false for an invalid exception' {
+            $invalidException = @{
+                spnname_patterns = @{
+                    patterns = @("*prod*", "*service*")
+                    match_type = "OR"
+                }
+                # Missing required fields like SPNDeptID, containertype, etc.
+            }
+
+            $result = Test-ExceptionSchema -Exception $invalidException
+            $result | Should -Be $false
+        }
+
+        It 'Should fail if TakeAwayID is present but expiration_date is missing' {
+            $invalidException = @{
+                spnname_patterns = @{
+                    patterns = @("*prod*")
+                    match_type = "OR"
+                }
+                spndeptid = "Dept001"
+                containertype = @("rg")
+                role = @("owner")
+                environment = "prod"
+                dynamic = $true
+                dynamic_scope = $false
+                exception_type = "dynamic"
+                takeawayid = "TakeAway123"
+                # Missing expiration_date
+            }
+
+            $result = Test-ExceptionSchema -Exception $invalidException
+            $result | Should -Be $false
+        }
+    }
+
+    # Test for Add-Exception
+    Describe 'Add-Exception' {
         It 'Should add a new exception to a valid exceptions.json file' {
-            # Mocking a file path for testing purposes
-            $testFilePath = Join-Path $PSScriptRoot "..\exceptions.json"
             $spnNamePatterns = @{
                 patterns = @("*prod*", "*service*")
                 match_type = "OR"
             }
 
-            # Create a test exceptions file with minimal content
-            $testContent = @{
-                Exceptions = @()
-            }
-            $testContent | ConvertTo-Json | Out-File -FilePath $testFilePath -Force
-
+            # Add the exception
             Add-Exception -SpnNamePatterns $spnNamePatterns `
                           -SPNDeptID "Dept001" `
-                          -ContainerTypes @("RG") `
+                          -ContainerTypes @("rg") `
                           -Roles @("owner") `
-                          -Environment "Prod" `
+                          -Environment "prod" `
                           -Dynamic $true `
                           -DynamicScope $false `
                           -ExceptionType "dynamic" `
                           -ExpirationDate (Get-Date).AddMonths(6)
 
-            # Check that the file was updated correctly
+            # Verify the addition
             $updatedExceptions = Get-Exceptions
             $updatedExceptions.Exceptions.Count | Should -BeGreaterThan 0
         }
 
         It 'Should throw an error if a duplicate exception is added' {
-            # Duplicate test case
-            $testFilePath = Join-Path $PSScriptRoot "..\exceptions.json"
             $spnNamePatterns = @{
                 patterns = @("*prod*", "*service*")
                 match_type = "OR"
@@ -38,9 +107,9 @@
             # Add the same exception twice, expecting the second to fail
             Add-Exception -SpnNamePatterns $spnNamePatterns `
                           -SPNDeptID "Dept001" `
-                          -ContainerTypes @("RG") `
+                          -ContainerTypes @("rg") `
                           -Roles @("owner") `
-                          -Environment "Prod" `
+                          -Environment "prod" `
                           -Dynamic $true `
                           -DynamicScope $false `
                           -ExceptionType "dynamic" `
@@ -48,9 +117,9 @@
 
             { Add-Exception -SpnNamePatterns $spnNamePatterns `
                             -SPNDeptID "Dept001" `
-                            -ContainerTypes @("RG") `
+                            -ContainerTypes @("rg") `
                             -Roles @("owner") `
-                            -Environment "Prod" `
+                            -Environment "prod" `
                             -Dynamic $true `
                             -DynamicScope $false `
                             -ExceptionType "dynamic" `
@@ -61,7 +130,6 @@
     # Test for Save-Exceptions
     Describe 'Save-Exceptions' {
         It 'Should save exceptions to a valid file path' {
-            $testFilePath = Join-Path $PSScriptRoot "..\exceptions.json"
             $testExceptions = @{
                 Exceptions = @(
                     @{
@@ -69,10 +137,10 @@
                             patterns = @("*prod*", "*service*")
                             match_type = "OR"
                         }
-                        SPNdeptID = "Dept001"
-                        containertype = @("RG")
+                        spndeptid = "Dept001"
+                        containertype = @("rg")
                         role = @("owner")
-                        environment = "Prod"
+                        environment = "prod"
                         dynamic = $true
                         dynamic_scope = $false
                         exception_type = "dynamic"
@@ -83,7 +151,7 @@
             Save-Exceptions -ExceptionsList $testExceptions
 
             # Verify the file was saved
-            $fileContent = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
+            $fileContent = Get-Content -Path (Join-Path $PSScriptRoot "..\exceptions.json") -Raw | ConvertFrom-Json
             $fileContent.Exceptions.Count | Should -Be 1
         }
 
