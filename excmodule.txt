@@ -1,7 +1,7 @@
 # Function: Get-Exceptions
 <#
 .SYNOPSIS
-    Retrieves exceptions from a JSON file located in the root of the repo.
+    Retrieves exceptions from the exceptions.json file in the root of the repo.
 
 .DESCRIPTION
     This function reads a JSON file containing exception details and converts it into a PowerShell object.
@@ -22,7 +22,8 @@ function Get-Exceptions {
         if (Test-Path $FilePath) {
             $jsonContent = Get-Content -Path $FilePath -Raw
             $exceptions = $jsonContent | ConvertFrom-Json
-            return $exceptions
+            # Ensure all keys are lowercase
+            return $exceptions | ForEach-Object { $_.PSObject.Properties.Name = $_.PSObject.Properties.Name.ToLower(); $_ }
         } else {
             throw "File not found: $FilePath"
         }
@@ -33,14 +34,16 @@ function Get-Exceptions {
 }
 
 # Function: Test-ExceptionSchema
-# (No path changes required for this function)
 <#
 .SYNOPSIS
     Validates an exception against the predefined schema.
 
 .DESCRIPTION
     This function validates that the given exception adheres to the required schema, checking for required fields, 
-    correct data types, and allowed values.
+    correct data types, and allowed values. If `TakeAwayID` is present, it ensures `expiration_date` is also present.
+
+.PARAMETER Exception
+    A hashtable representing the exception to validate.
 
 .EXAMPLE
     PS C:\> Test-ExceptionSchema -Exception $newException
@@ -51,22 +54,112 @@ function Get-Exceptions {
     Returns $true if validation passes, $false otherwise.
 #>
 function Test-ExceptionSchema {
-    # Same content as before, no path updates required
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Exception
+    )
+
+    $validationErrors = @()
+
+    # Convert keys to lowercase to ensure case insensitivity
+    $Exception = $Exception | ForEach-Object { $_.PSObject.Properties.Name = $_.PSObject.Properties.Name.ToLower(); $_ }
+
+    # Required field check for SPNdeptID
+    if (-not $Exception.ContainsKey("spndeptid")) {
+        $validationErrors += "Missing required field: SPNdeptID (which maps to TakeAwayID and ISOApprovalID)."
+    }
+
+    # Required field check for other fields
+    if (-not $Exception.ContainsKey("spnname_patterns")) {
+        $validationErrors += "Missing required field: spnname_patterns."
+    }
+    if (-not $Exception.ContainsKey("containertype")) {
+        $validationErrors += "Missing required field: containertype."
+    }
+    if (-not $Exception.ContainsKey("role")) {
+        $validationErrors += "Missing required field: role."
+    }
+    if (-not $Exception.ContainsKey("environment")) {
+        $validationErrors += "Missing required field: environment."
+    }
+    if (-not $Exception.ContainsKey("dynamic")) {
+        $validationErrors += "Missing required field: dynamic."
+    }
+    if (-not $Exception.ContainsKey("dynamic_scope")) {
+        $validationErrors += "Missing required field: dynamic_scope."
+    }
+    if (-not $Exception.ContainsKey("exception_type")) {
+        $validationErrors += "Missing required field: exception_type."
+    }
+
+    # Field type validation
+    if ($Exception.spndeptid -and -not ($Exception.spndeptid -is [string])) {
+        $validationErrors += "Field SPNdeptID must be a string."
+    }
+    if ($Exception.containertype -and -not ($Exception.containertype -is [array])) {
+        $validationErrors += "Field containertype must be an array."
+    }
+    if ($Exception.role -and -not ($Exception.role -is [array])) {
+        $validationErrors += "Field role must be an array."
+    }
+    if ($Exception.environment -and -not ($Exception.environment -is [string])) {
+        $validationErrors += "Field environment must be a string."
+    }
+    if ($Exception.dynamic -and -not ($Exception.dynamic -is [boolean])) {
+        $validationErrors += "Field dynamic must be a boolean."
+    }
+    if ($Exception.dynamic_scope -and -not ($Exception.dynamic_scope -is [boolean])) {
+        $validationErrors += "Field dynamic_scope must be a boolean."
+    }
+    if ($Exception.exception_type -and -not ($Exception.exception_type -is [string])) {
+        $validationErrors += "Field exception_type must be a string."
+    }
+
+    # If TakeAwayID is present, expiration_date must be present
+    if ($Exception.ContainsKey("takeawayid") -and -not $Exception.ContainsKey("expiration_date")) {
+        $validationErrors += "TakeAwayID is present, but expiration_date is missing."
+    }
+
+    # Enum validation for certain fields
+    $validContainerTypes = @("rg", "sub", "mg")
+    if ($Exception.containertype -and !($validContainerTypes -contains $Exception.containertype)) {
+        $validationErrors += "Field containertype contains invalid values. Allowed values are 'RG', 'sub', 'MG'."
+    }
+
+    $validRoles = @("uaa", "owner", "contributor")
+    if ($Exception.role -and !($validRoles -contains $Exception.role)) {
+        $validationErrors += "Field role contains invalid values. Allowed values are 'UAA', 'owner', 'contributor'."
+    }
+
+    $validEnvironments = @("prod", "qa", "uat", "dev")
+    if ($Exception.environment -and !($validEnvironments -contains $Exception.environment)) {
+        $validationErrors += "Field environment contains invalid values. Allowed values are 'Prod', 'QA', 'UAT', 'Dev'."
+    }
+
+    # Return validation results
+    if ($validationErrors.Count -eq 0) {
+        Write-Host "Validation passed."
+        return $true
+    } else {
+        Write-Host "Validation failed with errors:"
+        $validationErrors | ForEach-Object { Write-Host $_ }
+        return $false
+    }
 }
 
 # Function: Add-Exception
 <#
 .SYNOPSIS
-    Adds a new exception to the `exceptions.json` file located in the root of the repo.
+    Adds a new exception to the exceptions.json file in the root of the repo.
 
 .DESCRIPTION
-    This function validates a new exception and adds it to the specified `exceptions.json` file. It performs validation,
+    This function validates a new exception and adds it to the specified exceptions.json file. It performs validation,
     duplicate checks, and saves the new exception to the file if it passes validation.
 
 .EXAMPLE
     PS C:\> Add-Exception -SpnNamePatterns $spnNamePatterns -SPNDeptID "Dept001" -ContainerTypes @("RG", "sub") -Roles @("owner") -Environment "Prod" -Dynamic $true -DynamicScope $false -ExceptionType "dynamic" -ExpirationDate (Get-Date).AddMonths(6)
 
-    Adds a new exception to the `exceptions.json` file after validation and duplicate checks.
+    Adds a new exception to the exceptions.json file after validation and duplicate checks.
 
 .NOTES
     Ensure the JSON file is properly formatted and exists in the root directory.
@@ -100,7 +193,7 @@ function Add-Exception {
         # Build the new exception object
         $newException = @{
             spnname_patterns = $SpnNamePatterns
-            SPNdeptID        = $SPNDeptID
+            spndeptid        = $SPNDeptID
             containertype    = $ContainerTypes
             role             = $Roles
             environment      = $Environment
@@ -109,6 +202,9 @@ function Add-Exception {
             exception_type   = $ExceptionType
             expiration_date  = $ExpirationDate
         }
+
+        # Convert all keys to lowercase
+        $newException = $newException | ForEach-Object { $_.PSObject.Properties.Name = $_.PSObject.Properties.Name.ToLower(); $_ }
 
         # Validate the new exception against the schema
         if (-not (Test-ExceptionSchema -Exception $newException)) {
@@ -126,64 +222,4 @@ function Add-Exception {
 
         # Check for duplicates
         $duplicate = $exceptions.Exceptions | Where-Object {
-            $_.spnname_patterns.patterns -eq $SpnNamePatterns.patterns -and
-            $_.containertype -eq $ContainerTypes -and
-            $_.role -eq $Roles -and
-            $_.environment -eq $Environment
-        }
-
-        if ($duplicate) {
-            Write-Error "Duplicate exception found. No changes made."
-            return
-        }
-
-        # Add the new exception to the list
-        $exceptions.Exceptions += $newException
-
-        # Save the updated exceptions list to the JSON file
-        try {
-            Save-Exceptions -ExceptionsList $exceptions
-        } catch {
-            Write-Error "Failed to save the updated exceptions file: $FilePath : $_"
-            return
-        }
-
-        Write-Host "New exception added successfully."
-    } catch {
-        Write-Error "An unexpected error occurred: $_"
-    }
-}
-
-# Function: Save-Exceptions
-<#
-.SYNOPSIS
-    Saves the updated exceptions list to the `exceptions.json` file located in the root of the repo.
-
-.DESCRIPTION
-    This function takes a hashtable of exceptions and writes it to the specified `exceptions.json` file.
-
-.EXAMPLE
-    PS C:\> Save-Exceptions -ExceptionsList $exceptions
-
-    Saves the exceptions list to the `exceptions.json` file.
-
-.NOTES
-    Ensure the file is accessible and writable before using this function.
-#>
-function Save-Exceptions {
-    param (
-        [Parameter(Mandatory = $true)]
-        [hashtable]$ExceptionsList
-    )
-    
-    try {
-        $FilePath = Join-Path $PSScriptRoot "..\exceptions.json"
-        $jsonContent = $ExceptionsList | ConvertTo-Json -Depth 10
-        $jsonContent | Out-File -FilePath $FilePath -Force
-    } catch {
-        Write-Error "Failed to save exceptions to $FilePath : $_"
-    }
-}
-
-# Export module functions
-Export-ModuleMember -Function Get-Exceptions, Test-ExceptionSchema, Add-Exception, Save-Exceptions
+            $_.spnname_patterns.patterns
