@@ -1,0 +1,227 @@
+{
+  "ExceptionSchemas": {
+    "SimpleException": {
+      "description": "Schema for simple 1:1 exceptions with dynamic SPNs/containers",
+      "properties": {
+        "spnname_patterns": {
+          "type": "object",
+          "description": "Object to handle SPN name patterns and match type",
+          "properties": {
+            "patterns": {
+              "type": "array",
+              "description": "Array of patterns for matching SPN display names",
+              "items": {
+                "type": "string"
+              }
+            },
+            "match_type": {
+              "type": "string",
+              "enum": ["AND", "OR"],
+              "description": "Type of match logic (AND or OR)"
+            }
+          }
+        },
+        "spnobjtID": {
+          "type": "string",
+          "description": "Object ID of the service principal (optional)"
+        },
+        "SPNdeptID": {
+          "type": "string",
+          "description": "Department ID of the service principal"
+        },
+        "azurecontainerscopeid": {
+          "type": "string",
+          "description": "Scope ID of the Azure container (optional)"
+        },
+        "azurecontainerDeptID": {
+          "type": "string",
+          "description": "Department ID of the Azure container"
+        },
+        "containertype": {
+          "type": "array",
+          "description": "Type of the Azure container",
+          "items": {
+            "type": "string",
+            "enum": ["RG", "sub", "MG"]
+          },
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "role": {
+          "type": "array",
+          "description": "Roles assigned to the SPN on the resource",
+          "items": {
+            "type": "string",
+            "enum": ["UAA", "owner", "contributor"]
+          },
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "environment": {
+          "type": "string",
+          "description": "Environment of the SPN or Azure container",
+          "enum": ["Prod", "QA", "UAT", "Dev"]
+        },
+        "dynamic": {
+          "type": "boolean",
+          "description": "Indicates if the SPN or container is dynamic (i.e., may be created or deleted over time)"
+        },
+        "dynamic_scope": {
+          "type": "boolean",
+          "description": "Indicates if the SPN or container applies to any container of a given type (true), or is restricted to specific name patterns (false)"
+        },
+        "exception_type": {
+          "type": "string",
+          "description": "Type of exception (permanent or dynamic)"
+        },
+        "expiration_date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Expiration date for temporary exceptions"
+        }
+      },
+      "required": ["spnname_patterns", "containertype", "role", "environment", "dynamic", "dynamic_scope", "exception_type"]
+    },
+    "StaticSPNException": {
+      "description": "Schema for static and dynamic SPNs with compact AND/OR logic",
+      "properties": {
+        "spnname_patterns": {
+          "type": "object",
+          "description": "Object to handle SPN name patterns and match type",
+          "properties": {
+            "patterns": {
+              "type": "array",
+              "description": "Array of patterns for matching SPN display names",
+              "items": {
+                "type": "string"
+              }
+            },
+            "match_type": {
+              "type": "string",
+              "enum": ["AND", "OR"],
+              "description": "Type of match logic (AND or OR)"
+            }
+          }
+        },
+        "spnobjtID": {
+          "type": "string",
+          "description": "Object ID of the static SPN (optional)"
+        },
+        "azurecontainers": {
+          "type": "array",
+          "description": "List of Azure containers this SPN has access to",
+          "items": {
+            "type": "object",
+            "properties": {
+              "container_patterns": {
+                "type": "object",
+                "properties": {
+                  "patterns": {
+                    "type": "array",
+                    "description": "Array of patterns for matching container display names",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "match_type": {
+                    "type": "string",
+                    "enum": ["AND", "OR"],
+                    "description": "Type of match logic (AND or OR)"
+                  }
+                }
+              },
+              "container_scope_id": {
+                "type": "string",
+                "description": "Scope ID of the Azure container (optional)"
+              },
+              "containertype": {
+                "type": "string",
+                "enum": ["RG", "sub", "MG"]
+              },
+              "role": {
+                "type": "string",
+                "enum": ["UAA", "owner", "contributor"]
+              },
+              "dynamic": {
+                "type": "boolean",
+                "description": "Indicates if the container is dynamic (i.e., may be created or deleted over time)"
+              },
+              "dynamic_scope": {
+                "type": "boolean",
+                "description": "Indicates if the container applies to any container of a given type (true), or is restricted to name patterns (false)"
+              }
+            }
+          }
+        },
+        "environment_match_required": {
+          "type": "boolean",
+          "description": "Whether environment match is required for newly added containers"
+        },
+        "department_id_match_required": {
+          "type": "boolean",
+          "description": "Whether department ID match is required for newly added containers"
+        },
+        "exception_type": {
+          "type": "string",
+          "description": "Type of exception (permanent or dynamic)"
+        },
+        "expiration_date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Expiration date for temporary exceptions"
+        }
+      },
+      "required": ["azurecontainers", "dynamic", "dynamic_scope", "exception_type"]
+    }
+  },
+  "Exceptions": [
+    {
+      "spnname_patterns": {
+        "patterns": ["StaticSPN1", "*spn-prod*"],
+        "match_type": "OR"
+      },
+      "azurecontainers": [
+        {
+          "container_patterns": {
+            "patterns": ["*prod-mgmt*", "*global-net*"],
+            "match_type": "OR"
+          },
+          "containertype": "MG",
+          "role": "owner",
+          "dynamic": false,
+          "dynamic_scope": true
+        },
+        {
+          "container_scope_id": "Scope456",
+          "containertype": "RG",
+          "role": "UAA",
+          "dynamic": true,
+          "dynamic_scope": false
+        }
+      ],
+      "environment_match_required": true,
+      "department_id_match_required": true,
+      "exception_type": "permanent"
+    },
+    {
+      "spnname_patterns": {
+        "patterns": ["TempSPN", "*service*"],
+        "match_type": "AND"
+      },
+      "spnobjtID": "67890",
+      "azurecontainers": [
+        {
+          "container_scope_id": "Scope789",
+          "containertype": "sub",
+          "role": "contributor",
+          "dynamic": true,
+          "dynamic_scope": true
+        }
+      ],
+      "environment_match_required": false,
+      "department_id_match_required": false,
+      "exception_type": "dynamic",
+      "expiration_date": "2024-12-31T23:59:59Z"
+    }
+  ]
+}
