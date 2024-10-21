@@ -143,11 +143,15 @@ function Get-Config {
 }
 #endregion
 #region Add-Exception
+#region Add-Exception
 function Add-Exception {
     [CmdletBinding(DefaultParameterSetName = "Dynamic")]
     param (
-        [Parameter(Mandatory = $true)]
-        [string]$spn_object_id,
+        [Parameter(Mandatory = $true, ParameterSetName = "NameLike")]
+        [array]$spnNameLike,  # Wildcard matching for names
+
+        [Parameter(Mandatory = $false, ParameterSetName = "ObjectId")]
+        [string]$spn_object_id,  # Optional if spnNameLike is provided
 
         [Parameter(Mandatory = $true)]
         [array]$roles,
@@ -176,10 +180,7 @@ function Add-Exception {
 
         [ValidateSet("managementGroup", "subscription", "resourceGroup")]
         [Parameter(Mandatory = $true)]
-        [string]$azScopeType,  # Added as a mandatory parameter
-
-        [array]$spnNameLike,  # Will have * added to either side
-        [array]$azureObjectNameLike  # Will have * added to either side
+        [string]$azScopeType  # Added as a mandatory parameter
     )
 
     # Load configuration settings
@@ -200,9 +201,8 @@ function Add-Exception {
 
     # Prepare name-like fields with wildcards
     $spnNameLikeWildcard = $spnNameLike | ForEach-Object { "*$_*" }
-    $azureObjectNameLikeWildcard = $azureObjectNameLike | ForEach-Object { "*$_*" }
 
-    # Build the new exception object with CSA and other fields
+    # Build the new exception object
     $newException = [pscustomobject]@{
         spn_object_id       = $spn_object_id
         roles               = $roles | ForEach-Object { $_.ToLower() }  # Convert roles to lowercase
@@ -213,9 +213,6 @@ function Add-Exception {
         azureObjectEnv      = $azureObjectEnv.ToLower()  # Convert azureObjectEnv to lowercase
         AzScope_eonid       = if ($AzScope_eonid) { $AzScope_eonid } else { $null }
         spnNameLike         = $spnNameLikeWildcard
-        azureObjectNameLike = $azureObjectNameLikeWildcard
-        SecArch             = $SecArch
-        ActionPlan          = $ActionPlan
         azScopeType         = $azScopeType  # Store the validated scope type
     }
 
@@ -228,3 +225,4 @@ function Add-Exception {
     Write-Host "Exception successfully added and stored in $jsonFilePath."
 }
 #endregion
+
