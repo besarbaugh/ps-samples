@@ -49,6 +49,8 @@ function Add-Exception {
     if ($SecArch -and $ActionPlan) {
         throw "Cannot have both SecArch and ActionPlan."
     }
+    if ($spn_object_id -and $spnNameLike) {
+    throw "cannot have both spnNameLike and spn_obj_id"}
 
     # Prepare name-like fields with wildcards
     $spnNameLikeWildcard = $spnNameLike | ForEach-Object { "*$_*" }
