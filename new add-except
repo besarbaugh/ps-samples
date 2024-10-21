@@ -1,0 +1,128 @@
+function Add-Exception {
+    [CmdletBinding(DefaultParameterSetName = 'ActionPlanSet')]
+    param (
+        # Core Parameters
+        [Parameter(Mandatory = $false)]
+        [string]$SPNObjectID,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SPNNameLike,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Roles,  # Treat Roles as an array
+
+        [Parameter(Mandatory = $false)]
+        [string]$AzScopeObjectID,
+
+        [Parameter(Mandatory = $false)]
+        [string]$AzScopeNameLike,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("RG", "Sub", "MG")]
+        [string]$AzureScopeType,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SPNEonID,
+
+        [Parameter(Mandatory = $false)]
+        [string]$AzScopeEonID,
+
+        # ActionPlan Parameter Set
+        [Parameter(Mandatory = $false, ParameterSetName = 'ActionPlanSet')]
+        [string]$ActionPlanID,
+
+        [Parameter(Mandatory = $false, ParameterSetName = 'ActionPlanSet')]
+        [string]$DateAdded = (Get-Date -Format "yyyy-MM-dd"),  # Default to current date
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'ActionPlanSet')]
+        [string]$ExpirationDate,
+
+        # SecArch Parameter Set
+        [Parameter(Mandatory = $true, ParameterSetName = 'SecArchSet')]
+        [string]$SecArchID,
+
+        [Parameter(Mandatory = $false, ParameterSetName = 'SecArchSet')]
+        [string]$SecArchDateAdded = (Get-Date -Format "yyyy-MM-dd"),  # Default to current date
+
+        # File Path
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    # Validate SPN identifiers
+    if (-not $SPNObjectID -and -not $SPNNameLike) {
+        Write-Error "You must specify either SPNObjectID or SPNNameLike."
+        return
+    }
+
+    # Validate Azure Scope identifiers
+    if (-not $AzScopeObjectID -and -not $AzScopeNameLike) {
+        Write-Error "You must specify either AzScopeObjectID or AzScopeNameLike."
+        return
+    }
+
+    # Validate EonID presence if required for Resource Groups
+    if ($AzureScopeType -eq "RG" -and $SPNEonID -and $AzScopeEonID) {
+        if ($SPNEonID -ne $AzScopeEonID) {
+            Write-Error "SPN EonID and Azure Scope EonID must match for Resource Groups when both are provided."
+            return
+        }
+    }
+
+    # Validate ActionPlan or SecArch
+    $ActionPlan = $null
+    $SecArch = $null
+
+    if ($PSCmdlet.ParameterSetName -eq 'ActionPlanSet') {
+        $ActionPlan = @{
+            ID = $ActionPlanID
+            DateAdded = $DateAdded
+            ExpirationDate = $ExpirationDate
+        }
+    }
+    elseif ($PSCmdlet.ParameterSetName -eq 'SecArchSet') {
+        $SecArch = @{
+            ID = $SecArchID
+            DateAdded = $SecArchDateAdded
+        }
+    }
+    else {
+        Write-Error "You must specify either ActionPlan or SecArch."
+        return
+    }
+
+    # Load the existing JSON file (initialize as an empty array if it is empty)
+    $currentData = @()
+    if (Test-Path $FilePath) {
+        $jsonContent = Get-Content -Path $FilePath -Raw
+        if (-not [string]::IsNullOrWhiteSpace($jsonContent)) {
+            $currentData = $jsonContent | ConvertFrom-Json
+
+            # Convert to array if only a single entry exists in the JSON
+            if ($currentData -is [hashtable]) {
+                $currentData = @($currentData)
+            }
+        }
+    }
+
+    # Create the new exception object
+    $newException = @{
+        "SPNObjectID" = $SPNObjectID
+        "SPNNameLike" = $SPNNameLike
+        "Roles" = $Roles
+        "AzScopeObjectID" = $AzScopeObjectID
+        "AzScopeNameLike" = $AzScopeNameLike
+        "AzureScopeType" = $AzureScopeType
+        "SPNEonID" = $SPNEonID
+        "AzScopeEonID" = $AzScopeEonID
+        "ActionPlan" = $ActionPlan
+        "SecArch" = $SecArch
+    }
+
+    # Append the new exception object to the current data
+    $currentData += $newException
+
+    # Convert back to JSON and save
+    $currentData | ConvertTo-Json -Depth 10 | Set-Content -Path $FilePath -Force
+    Write-Output "Exception added to JSON file at: $FilePath"
+}
