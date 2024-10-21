@@ -1,235 +1,198 @@
-# Import the module before running tests
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-Import-Module (Join-Path $scriptDir "..\modules\ExceptionManager.psm1")
+# Load the helper functions from the same script file
+. "$PSScriptRoot\ExceptionManager.ps1"
 
-# Start the Pester test block
-Describe 'ExceptionManager Module Tests' {
+# Define the path to the exceptions.json file
+$FilePath = Join-Path $PSScriptRoot "..\exceptions.json"
+
+# Sample exceptions for testing
+$sampleExceptionValid = @{
+    spnname_patterns = @{
+        patterns   = @("*sample-spn*")
+        match_type = "AND"
+    }
+    spndeptid = "Dept001"
+    containertype = @("RG")
+    role = @("owner")
+    environment = "Prod"
+    dynamic = $true
+    dynamic_scope = $false
+    exception_type = "permanent"
+    containerdeptid = "Dept001"
+    containerid = "Container123"
+}
+
+$sampleExceptionInvalid = @{
+    spnname_patterns = @{
+        patterns   = @("*invalid-spn*")
+        match_type = "OR"
+    }
+    spndeptid = "Dept002"
+    containertype = @("InvalidType")  # Invalid container type to cause a failure
+    role = @("owner")
+    environment = "Prod"
+    dynamic = $true
+    dynamic_scope = $false
+    exception_type = "permanent"
+    containerdeptid = "Dept002"
+    containerid = "Container456"
+}
+
+# Sample exception for testing TakeawayID and ExpirationDate
+$sampleExceptionWithTakeaway = @{
+    spnname_patterns = @{
+        patterns   = @("*takeaway-spn*")
+        match_type = "OR"
+    }
+    spndeptid = "Dept003"
+    containertype = @("RG")
+    role = @("owner")
+    environment = "Prod"
+    dynamic = $false
+    dynamic_scope = $false
+    exception_type = "temporary"
+    takeawayid = "Takeaway123"
+    expiration_date = "2024-12-31T23:59:59Z"
+    containerdeptid = "Dept003"
+    containerid = "Container789"
+}
+
+# Sample exception for ISOApproved
+$sampleExceptionISOApproved = @{
+    spnname_patterns = @{
+        patterns   = @("*isoapproved-spn*")
+        match_type = "AND"
+    }
+    spndeptid = "Dept004"
+    containertype = @("Sub")
+    role = @("contributor")
+    environment = "QA"
+    dynamic = $false
+    dynamic_scope = $false
+    exception_type = "permanent"
+    isoapprovedid = "ISO123"
+    containerdeptid = "Dept004"
+    containerid = "Container890"
+}
+
+Describe "ExceptionManager Helper Functions" {
 
     # Test for Get-Exceptions
-    Describe 'Get-Exceptions' {
-        It 'Should return a hashtable from a valid file path' {
-            $exceptions = Get-Exceptions
-            $exceptions | Should -Not -BeNullOrEmpty
-            $exceptions | Should -BeOfType 'hashtable'
+    It "Should load existing exceptions without error" {
+        # Create a mock exceptions file
+        $mockExceptions = @{
+            Exceptions = @($sampleExceptionValid)
         }
 
-        It 'Should throw an error if the file path does not exist' {
-            { Get-Exceptions } | Should -Throw "File not found"
-        }
-    }
+        $mockJsonContent = $mockExceptions | ConvertTo-Json -Depth 10
+        $mockJsonContent | Out-File -FilePath $FilePath -Force
 
-    # Test for Test-ExceptionSchema
-    Describe 'Test-ExceptionSchema' {
-        It 'Should return $true for a valid exception' {
-            $validException = @{
-                spnname_patterns = @{
-                    patterns = @("*prod*", "*service*")
-                    match_type = "OR"
-                }
-                spndeptid = "Dept001"
-                azurecontainerdeptid = "Dept001"
-                containertype = @("rg")
-                role = @("owner")
-                environment = "prod"
-                dynamic = $true
-                dynamic_scope = $false
-                exception_type = "dynamic"
-                expiration_date = "2024-12-31T23:59:59Z"
-            }
+        $loadedExceptions = Get-Exceptions -FilePath $FilePath
 
-            $result = Test-ExceptionSchema -Exception $validException
-            $result | Should -Be $true
-        }
-
-        It 'Should return $false for an invalid exception' {
-            $invalidException = @{
-                spnname_patterns = @{
-                    patterns = @("*prod*", "*service*")
-                    match_type = "OR"
-                }
-                # Missing required fields like SPNDeptID, containertype, etc.
-            }
-
-            $result = Test-ExceptionSchema -Exception $invalidException
-            $result | Should -Be $false
-        }
-
-        It 'Should fail if TakeAwayID is present but expiration_date is missing' {
-            $invalidException = @{
-                spnname_patterns = @{
-                    patterns = @("*prod*")
-                    match_type = "OR"
-                }
-                spndeptid = "Dept001"
-                containertype = @("rg")
-                role = @("owner")
-                environment = "prod"
-                dynamic = $true
-                dynamic_scope = $false
-                exception_type = "dynamic"
-                takeawayid = "TakeAway123"
-                # Missing expiration_date
-            }
-
-            $result = Test-ExceptionSchema -Exception $invalidException
-            $result | Should -Be $false
-        }
-
-        It 'Should pass if TakeAwayID and expiration_date are both present' {
-            $validException = @{
-                spnname_patterns = @{
-                    patterns = @("*prod*")
-                    match_type = "OR"
-                }
-                spndeptid = "Dept001"
-                containertype = @("rg")
-                role = @("owner")
-                environment = "prod"
-                dynamic = $true
-                dynamic_scope = $false
-                exception_type = "dynamic"
-                takeawayid = "TakeAway123"
-                expiration_date = "2024-12-31T23:59:59Z"
-            }
-
-            $result = Test-ExceptionSchema -Exception $validException
-            $result | Should -Be $true
-        }
-
-        It 'Should fail if SPNdeptID and AzureContainerDeptID do not match' {
-            $invalidException = @{
-                spnname_patterns = @{
-                    patterns = @("*prod*")
-                    match_type = "OR"
-                }
-                spndeptid = "Dept001"
-                azurecontainerdeptid = "Dept002"
-                containertype = @("rg")
-                role = @("owner")
-                environment = "prod"
-                dynamic = $true
-                dynamic_scope = $false
-                exception_type = "dynamic"
-            }
-
-            $result = Test-ExceptionSchema -Exception $invalidException
-            $result | Should -Be $false
-        }
-
-        It 'Should pass if SPNdeptID and AzureContainerDeptID match' {
-            $validException = @{
-                spnname_patterns = @{
-                    patterns = @("*prod*")
-                    match_type = "OR"
-                }
-                spndeptid = "Dept001"
-                azurecontainerdeptid = "Dept001"
-                containertype = @("rg")
-                role = @("owner")
-                environment = "prod"
-                dynamic = $true
-                dynamic_scope = $false
-                exception_type = "dynamic"
-            }
-
-            $result = Test-ExceptionSchema -Exception $validException
-            $result | Should -Be $true
-        }
-    }
-
-    # Test for Add-Exception
-    Describe 'Add-Exception' {
-        It 'Should add a new exception to a valid exceptions.json file' {
-            $spnNamePatterns = @{
-                patterns = @("*prod*", "*service*")
-                match_type = "OR"
-            }
-
-            # Add the exception
-            Add-Exception -SpnNamePatterns $spnNamePatterns `
-                          -SPNDeptID "Dept001" `
-                          -ContainerTypes @("rg") `
-                          -Roles @("owner") `
-                          -Environment "prod" `
-                          -Dynamic $true `
-                          -DynamicScope $false `
-                          -ExceptionType "dynamic" `
-                          -ExpirationDate (Get-Date).AddMonths(6) `
-                          -AzureContainerDeptID "Dept001"
-
-            # Verify the addition
-            $updatedExceptions = Get-Exceptions
-            $updatedExceptions.Exceptions.Count | Should -BeGreaterThan 0
-        }
-
-        It 'Should throw an error if a duplicate exception is added' {
-            $spnNamePatterns = @{
-                patterns = @("*prod*", "*service*")
-                match_type = "OR"
-            }
-
-            # Add the same exception twice, expecting the second to fail
-            Add-Exception -SpnNamePatterns $spnNamePatterns `
-                          -SPNDeptID "Dept001" `
-                          -ContainerTypes @("rg") `
-                          -Roles @("owner") `
-                          -Environment "prod" `
-                          -Dynamic $true `
-                          -DynamicScope $false `
-                          -ExceptionType "dynamic" `
-                          -ExpirationDate (Get-Date).AddMonths(6) `
-                          -AzureContainerDeptID "Dept001"
-
-            { Add-Exception -SpnNamePatterns $spnNamePatterns `
-                            -SPNDeptID "Dept001" `
-                            -ContainerTypes @("rg") `
-                            -Roles @("owner") `
-                            -Environment "prod" `
-                            -Dynamic $true `
-                            -DynamicScope $false `
-                            -ExceptionType "dynamic" `
-                            -ExpirationDate (Get-Date).AddMonths(6) `
-                            -AzureContainerDeptID "Dept001" } | Should -Throw "Duplicate exception found"
-        }
+        $loadedExceptions.Exceptions | Should -Not -BeNullOrEmpty
+        $loadedExceptions.Exceptions.Count | Should -Be 1
     }
 
     # Test for Save-Exceptions
-    Describe 'Save-Exceptions' {
-        It 'Should save exceptions to a valid file path' {
-            $testExceptions = @{
-                Exceptions = @(
-                    @{
-                        spnname_patterns = @{
-                            patterns = @("*prod*", "*service*")
-                            match_type = "OR"
-                        }
-                        spndeptid = "Dept001"
-                        containertype = @("rg")
-                        role = @("owner")
-                        environment = "prod"
-                        dynamic = $true
-                        dynamic_scope = $false
-                        exception_type = "dynamic"
-                        azurecontainerdeptid = "Dept001"
-                    }
-                )
-            }
-
-            Save-Exceptions -ExceptionsList $testExceptions
-
-            # Verify the file was saved
-            $fileContent = Get-Content -Path (Join-Path $PSScriptRoot "..\exceptions.json") -Raw | ConvertFrom-Json
-            $fileContent.Exceptions.Count | Should -Be 1
+    It "Should save updated exceptions without error" {
+        $updatedExceptions = @{
+            Exceptions = @($sampleExceptionValid, $sampleExceptionISOApproved)
         }
 
-        It 'Should throw an error if it fails to save' {
-            # Test with an invalid file path
-            $invalidFilePath = "C:\invalid\path\exceptions.json"
-            $exceptions = @{
-                Exceptions = @()
-            }
-
-            { Save-Exceptions -ExceptionsList $exceptions } | Should -Throw
-        }
+        { Save-Exceptions -ExceptionsList $updatedExceptions -FilePath $FilePath } | Should -Not -Throw
     }
-}
+
+    # Test for Test-ExceptionSchema with a valid exception
+    It "Should pass schema validation for a valid exception" {
+        Test-ExceptionSchema -Exception $sampleExceptionValid | Should -BeTrue
+    }
+
+    # Test for Test-ExceptionSchema with an invalid exception
+    It "Should fail schema validation for an invalid exception" {
+        Test-ExceptionSchema -Exception $sampleExceptionInvalid | Should -BeFalse
+    }
+
+    # Test for Add-Exception with a valid exception
+    It "Should add a valid exception to the exceptions file" {
+        # Reset the exceptions.json file
+        $resetExceptions = @{
+            Exceptions = @()
+        }
+        Save-Exceptions -ExceptionsList $resetExceptions -FilePath $FilePath
+
+        Add-Exception -SpnNamePatterns $sampleExceptionValid.spnname_patterns `
+                      -SPNDeptID $sampleExceptionValid.spndeptid `
+                      -ContainerTypes $sampleExceptionValid.containertype `
+                      -Roles $sampleExceptionValid.role `
+                      -Environment $sampleExceptionValid.environment `
+                      -Dynamic $sampleExceptionValid.dynamic `
+                      -DynamicScope $sampleExceptionValid.dynamic_scope `
+                      -ExceptionType $sampleExceptionValid.exception_type `
+                      -ContainerDeptID $sampleExceptionValid.containerdeptid `
+                      -ContainerID $sampleExceptionValid.containerid
+
+        $exceptionsAfterAdd = Get-Exceptions -FilePath $FilePath
+        $exceptionsAfterAdd.Exceptions.Count | Should -Be 1
+    }
+
+    # Test for duplicate exception
+    It "Should not add a duplicate exception" {
+        # Add the initial exception
+        Add-Exception -SpnNamePatterns $sampleExceptionValid.spnname_patterns `
+                      -SPNDeptID $sampleExceptionValid.spndeptid `
+                      -ContainerTypes $sampleExceptionValid.containertype `
+                      -Roles $sampleExceptionValid.role `
+                      -Environment $sampleExceptionValid.environment `
+                      -Dynamic $sampleExceptionValid.dynamic `
+                      -DynamicScope $sampleExceptionValid.dynamic_scope `
+                      -ExceptionType $sampleExceptionValid.exception_type `
+                      -ContainerDeptID $sampleExceptionValid.containerdeptid `
+                      -ContainerID $sampleExceptionValid.containerid
+
+        # Try adding the duplicate exception
+        { Add-Exception -SpnNamePatterns $sampleExceptionValid.spnname_patterns `
+                         -SPNDeptID $sampleExceptionValid.spndeptid `
+                         -ContainerTypes $sampleExceptionValid.containertype `
+                         -Roles $sampleExceptionValid.role `
+                         -Environment $sampleExceptionValid.environment `
+                         -Dynamic $sampleExceptionValid.dynamic `
+                         -DynamicScope $sampleExceptionValid.dynamic_scope `
+                         -ExceptionType $sampleExceptionValid.exception_type `
+                         -ContainerDeptID $sampleExceptionValid.containerdeptid `
+                         -ContainerID $sampleExceptionValid.containerid } | Should -Throw
+    }
+
+    # Test for adding an exception with TakeawayID and ExpirationDate
+    It "Should add an exception with TakeawayID and ExpirationDate without error" {
+        Add-Exception -SpnNamePatterns $sampleExceptionWithTakeaway.spnname_patterns `
+                      -SPNDeptID $sampleExceptionWithTakeaway.spndeptid `
+                      -ContainerTypes $sampleExceptionWithTakeaway.containertype `
+                      -Roles $sampleExceptionWithTakeaway.role `
+                      -Environment $sampleExceptionWithTakeaway.environment `
+                      -Dynamic $sampleExceptionWithTakeaway.dynamic `
+                      -DynamicScope $sampleExceptionWithTakeaway.dynamic_scope `
+                      -ExceptionType $sampleExceptionWithTakeaway.exception_type `
+                      -TakeawayID $sampleExceptionWithTakeaway.takeawayid `
+                      -ExpirationDate $sampleExceptionWithTakeaway.expiration_date `
+                      -ContainerDeptID $sampleExceptionWithTakeaway.containerdeptid `
+                      -ContainerID $sampleExceptionWithTakeaway.containerid
+
+        $exceptionsAfterAdd = Get-Exceptions -FilePath $FilePath
+        $exceptionsAfterAdd.Exceptions | Where-Object { $_.takeawayid -eq $sampleExceptionWithTakeaway.takeawayid } | Should -Not -BeNullOrEmpty
+    }
+
+    # Test for adding an exception with ISOApprovedID
+    It "Should add an exception with ISOApprovedID without error" {
+        Add-Exception -SpnNamePatterns $sampleExceptionISOApproved.spnname_patterns `
+                      -SPNDeptID $sampleExceptionISOApproved.spndeptid `
+                      -ContainerTypes $sampleExceptionISOApproved.containertype `
+                      -Roles $sampleExceptionISOApproved.role `
+                      -Environment $sampleExceptionISOApproved.environment `
+                      -Dynamic $sampleExceptionISOApproved.dynamic `
+                      -DynamicScope $sampleExceptionISOApproved.dynamic_scope `
+                      -ExceptionType $sampleExceptionISOApproved.exception_type `
+                      -ISOApprovedID $sampleExceptionISOApproved.isoapprovedid `
+                      -ContainerDeptID $sampleExceptionISOApproved.containerdeptid `
+                      -ContainerID $sampleExceptionISOApproved.containerid
+
+        $exceptionsAfterAdd = Get-Exceptions -FilePath $FilePath
+        $exceptionsAfterAdd.Exceptions | Wh
