@@ -130,4 +130,23 @@ Describe "ExceptionManager Helper Functions" {
                       -Roles $sampleExceptionDuplicate.role `
                       -Environment $sampleExceptionDuplicate.environment `
                       -Dynamic $sampleExceptionDuplicate.dynamic `
-                      -DynamicScop
+                      -DynamicScope $sampleExceptionDuplicate.dynamic_scope `
+                      -ExceptionType $sampleExceptionDuplicate.exception_type `
+                      -ExpirationDate $null `
+                      -ContainerDeptID $sampleExceptionDuplicate.containerdeptid `
+                      -ContainerID $sampleExceptionDuplicate.containerid
+
+        # Try adding the duplicate exception
+        { Add-Exception -SpnNamePatterns $sampleExceptionDuplicate.spnname_patterns `
+                         -SPNDeptID $sampleExceptionDuplicate.spndeptid `
+                         -ContainerTypes $sampleExceptionDuplicate.containertype `
+                         -Roles $sampleExceptionDuplicate.role `
+                         -Environment $sampleExceptionDuplicate.environment `
+                         -Dynamic $sampleExceptionDuplicate.dynamic `
+                         -DynamicScope $sampleExceptionDuplicate.dynamic_scope `
+                         -ExceptionType $sampleExceptionDuplicate.exception_type `
+                         -ExpirationDate $null `
+                         -ContainerDeptID $sampleExceptionDuplicate.containerdeptid `
+                         -ContainerID $sampleExceptionDuplicate.containerid } | Should -Throw
+    }
+}
