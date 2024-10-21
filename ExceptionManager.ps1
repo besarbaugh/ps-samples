@@ -108,97 +108,40 @@ function Get-Config {
     }
 }
 #endregion
-
-#region Add-Exception with CSA and Scalable JSON Storage
-<#
-.SYNOPSIS
-    Adds an exception to a JSON file, supporting dynamic/non-dynamic scenarios, SecArch or ActionPlan, and custom security attributes (CSA).
-
-.DESCRIPTION
-    This function adds an exception for either a dynamic or non-dynamic service principal or Azure scope. It handles SecArch or ActionPlan and incorporates CSA fields (spnEnv, spn_eonid, azureObjectEnv, and AzScope_eonid).
-    The function ensures data is written to a JSON file in a scalable format for mid- to long-term storage.
-
-.PARAMETER spn_object_id
-    The object ID of the service principal. Required for all exceptions.
-
-.PARAMETER roles
-    An array of roles (e.g., 'Owner', 'Contributor', 'User Access Administrator'). Required for all exceptions.
-
-.PARAMETER dynamic_spn
-    A boolean indicating if the SP is dynamic. Optional for dynamic exceptions.
-
-.PARAMETER dynamic_az_scope
-    A boolean indicating if the Azure scope is dynamic. Optional for dynamic exceptions.
-
-.PARAMETER SecArch
-    The SecArch details, including ID and date_added. This is required if no ActionPlan is provided.
-
-.PARAMETER ActionPlan
-    The ActionPlan details, including ID, date_added, and expiration_date. This is required if no SecArch is provided.
-
-.PARAMETER spnEnv
-    The environment of the SP, derived from custom security attributes (CSA).
-
-.PARAMETER spn_eonid
-    The EonID of the SP, derived from CSA.
-
-.PARAMETER azureObjectEnv
-    The environment of the Azure object (RG, subscription, etc.), derived from CSA.
-
-.PARAMETER AzScope_eonid
-    The EonID for the Azure scope, derived from CSA, only applicable to resource groups.
-
-.PARAMETER spnNameLike
-    Wildcard patterns for matching SPNs by name.
-
-.PARAMETER azureObjectNameLike
-    Wildcard patterns for matching Azure objects by name.
-
-.EXAMPLE
-    PS C:\> Add-Exception -spn_object_id "abc123" -roles @("Owner") -dynamic_spn $true -SecArch @{ id="sec-001"; date_added="2024-10-21" } -spnEnv "Prod" -spn_eonid "eon-001" -jsonFilePath ".\exceptions.json"
-
-    This example adds a dynamic SP exception with SecArch details and CSA information to the JSON file.
-#>
+#region Add-Exception
 function Add-Exception {
     [CmdletBinding(DefaultParameterSetName = "Dynamic")]
     param (
-        # Required for all cases
         [Parameter(Mandatory = $true)]
         [string]$spn_object_id,
 
         [Parameter(Mandatory = $true)]
         [array]$roles,
 
-        # Dynamic or Non-Dynamic (both optional)
         [Parameter(ParameterSetName = "Dynamic")]
         [bool]$dynamic_spn,
 
         [Parameter(ParameterSetName = "Dynamic")]
         [bool]$dynamic_az_scope,
 
-        # SecArch ParameterSet
         [Parameter(Mandatory = $true, ParameterSetName = "SecArch")]
         [PSCustomObject]$SecArch,
 
-        # ActionPlan ParameterSet
         [Parameter(Mandatory = $true, ParameterSetName = "ActionPlan")]
         [PSCustomObject]$ActionPlan,
 
-        # CSA-based fields
         [Parameter(Mandatory = $true)]
-        [string]$spnEnv,
+        [string]$spnEnv,  # Will be converted to lowercase
 
         [Parameter(Mandatory = $true)]
         [string]$spn_eonid,
 
-        [string]$azureObjectEnv,
+        [string]$azureObjectEnv,  # Will be converted to lowercase
 
         [string]$AzScope_eonid,  # Only required for resource groups
 
-        # Name-like wildcard patterns
-        [array]$spnNameLike,
-
-        [array]$azureObjectNameLike
+        [array]$spnNameLike,  # Will have * added to either side
+        [array]$azureObjectNameLike  # Will have * added to either side
     )
 
     # Load configuration settings
@@ -217,20 +160,38 @@ function Add-Exception {
         throw "Cannot have both SecArch and ActionPlan."
     }
 
-    # Build the new exception object with CSA and other fields
+    # Prepare name-like fields with wildcards
+    $spnNameLikeWildcard = $spnNameLike | ForEach-Object { "*$_*" }
+    $azureObjectNameLikeWildcard = $azureObjectNameLike | ForEach-Object { "*$_*" }
+
+    # Build the new exception object
     $newException = [pscustomobject]@{
         spn_object_id       = $spn_object_id
-        roles               = $roles
+        roles               = $roles | ForEach-Object { $_.ToLower() }  # Convert roles to lowercase
         dynamic_spn         = $dynamic_spn
         dynamic_az_scope    = $dynamic_az_scope
-        spnEnv              = $spnEnv
+        spnEnv              = $spnEnv.ToLower()  # Convert spnEnv to lowercase
         spn_eonid           = $spn_eonid
-        azureObjectEnv      = $azureObjectEnv
+        azureObjectEnv      = $azureObjectEnv.ToLower()  # Convert azureObjectEnv to lowercase
         AzScope_eonid       = if ($AzScope_eonid) { $AzScope_eonid } else { $null }
-        spnNameLike         = $spnNameLike
-        azureObjectNameLike = $azureObjectNameLike
+        spnNameLike         = $spnNameLikeWildcard
+        azureObjectNameLike = $azureObjectNameLikeWildcard
         SecArch             = $SecArch
         ActionPlan          = $ActionPlan
+    }
+
+    # Rename properties for JSON output
+    if ($newException.AzureScope_eonid -ne $null) {
+        $newException.AzureScope_eonid = $newException.AzureScope_eonid
+    }
+
+    # Determine the correct type for JSON output
+    if ($newException.spn_object_id -like "*/") {
+        $newException.ObjectType = "resourceGroup"  # or "subscription" based on your context
+    } elseif ($newException.spn_object_id -like "*/managementGroups/*") {
+        $newException.ObjectType = "managementGroup"
+    } else {
+        $newException.ObjectType = "subscription"
     }
 
     # Add the new exception to the list
