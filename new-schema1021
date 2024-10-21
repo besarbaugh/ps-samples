@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Exception Schema",
+  "type": "object",
+  "properties": {
+    "spn_name": {
+      "type": "string",
+      "description": "The name of the service principal (SPN)"
+    },
+    "spnname_patterns": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "match_type": {
+          "type": "string",
+          "enum": ["AND", "OR"]
+        }
+      },
+      "required": ["patterns", "match_type"]
+    },
+    "spn_eonid": {
+      "type": "string",
+      "description": "Eon ID associated with the SPN"
+    },
+    "spn_object_id": {
+      "type": "string",
+      "description": "Unique identifier of the SPN object",
+      "minLength": 1
+    },
+    "azure_scope_name_patterns": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "match_type": {
+          "type": "string",
+          "enum": ["AND", "OR"]
+        }
+      },
+      "required": ["patterns", "match_type"]
+    },
+    "azure_scope_type": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["RG", "SUB", "MG"]
+      }
+    },
+    "role": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["User Access Administrator", "Owner", "Contributor", "AppDevContributor"]
+      }
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["Prod", "QA", "UAT", "Dev", "NonProd"]
+    },
+    "dynamic_spn": {
+      "type": "boolean"
+    },
+    "dynamic_azure_scope": {
+      "type": "boolean"
+    },
+    "exception_type": {
+      "type": "string",
+      "enum": ["permanent", "temporary"]
+    },
+    "SecArch": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "date_added": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ActionPlan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "date_added": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiration_date": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "az_scope_eonid": {
+      "type": "string",
+      "description": "Eon ID associated with the Azure container"
+    },
+    "az_scope_objectid": {
+      "type": "string",
+      "description": "Unique identifier of the Azure container (resource group, subscription, or management group)",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "spn_object_id",
+    "spnname_patterns",
+    "spn_eonid",
+    "role",
+    "environment",
+    "azure_scope_type",
+    "dynamic_spn",
+    "dynamic_azure_scope",
+    "exception_type",
+    "az_scope_eonid"
+  ],
+  "dependencies": {
+    "ActionPlan": ["expiration_date"]
+  }
+}
