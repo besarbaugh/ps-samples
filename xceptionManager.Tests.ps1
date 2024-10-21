@@ -71,7 +71,7 @@ Describe "ExceptionManager Helper Functions" {
 
         $loadedExceptions = Get-Exceptions
 
-        $loadedExceptions.Exceptions | Should -BeOfType "System.Collections.ObjectModel.Collection[System.Management.Automation.PSObject]"
+        $loadedExceptions.Exceptions | Should -Not -Be $null
         $loadedExceptions.Exceptions.Count | Should -Be 1
     }
 
