@@ -88,4 +88,48 @@ function Add-Exception {
         }
 
         # Convert all keys to lowercase
-        $newException = $newException | ForEach-Object { $_.PSObject.Properties.Name = $_.PSObject
+        $newException = $newException | ForEach-Object { $_.PSObject.Properties.Name = $_.PSObject.Properties.Name.ToLower(); $_ }
+
+        # Validate the new exception against the schema
+        if (-not (Test-ExceptionSchema -Exception $newException)) {
+            Write-Error "Validation failed. The exception could not be added."
+            return
+        }
+
+        # Load the existing exceptions from the JSON file
+        try {
+            $exceptions = Get-Exceptions
+        } catch {
+            Write-Error "Failed to load the exceptions file: $FilePath : $_"
+            return
+        }
+
+        # Check for duplicates
+        $duplicate = $exceptions.Exceptions | Where-Object {
+            $_.spnname_patterns.patterns -eq $SpnNamePatterns.patterns -and
+            $_.containertype -eq $ContainerTypes -and
+            $_.role -eq $Roles -and
+            $_.environment -eq $Environment
+        }
+
+        if ($duplicate) {
+            Write-Error "Duplicate exception found. No changes made."
+            return
+        }
+
+        # Add the new exception to the list
+        $exceptions.Exceptions += $newException
+
+        # Save the updated exceptions list to the JSON file
+        try {
+            Save-Exceptions -ExceptionsList $exceptions
+        } catch {
+            Write-Error "Failed to save the updated exceptions file: $FilePath : $_"
+            return
+        }
+
+        Write-Host "New exception added successfully."
+    } catch {
+        Write-Error "An unexpected error occurred: $_"
+    }
+}
