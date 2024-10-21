@@ -1,80 +1,120 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Exception Schema",
-    "type": "object",
-    "properties": {
-        "spnname_patterns": {
-            "type": "object",
-            "properties": {
-                "patterns": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "match_type": {
-                    "type": "string",
-                    "enum": ["AND", "OR"]
-                }
-            },
-            "required": ["patterns", "match_type"]
-        },
-        "spnobjtID": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Exception Schema",
+  "type": "object",
+  "properties": {
+    "spnname_patterns": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "items": {
             "type": "string"
+          }
         },
-        "SPNdeptID": {
+        "match_type": {
+          "type": "string",
+          "enum": ["AND", "OR"]
+        }
+      },
+      "required": ["patterns", "match_type"]
+    },
+    "azureScopeName_patterns": {
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "items": {
             "type": "string"
+          }
         },
-        "containertype": {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "enum": ["RG", "sub", "MG"]
-            }
+        "match_type": {
+          "type": "string",
+          "enum": ["AND", "OR"]
+        }
+      },
+      "required": ["patterns", "match_type"]
+    },
+    "spnEonid": {
+      "type": "string"
+    },
+    "azureScopeType": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["RG", "SUB", "MG"]
+      }
+    },
+    "role": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["UAA", "owner", "contributor"]
+      }
+    },
+    "environment": {
+      "type": "string",
+      "enum": ["Prod", "QA", "UAT", "Dev"]
+    },
+    "dynamic": {
+      "type": "boolean"
+    },
+    "dynamic_scope": {
+      "type": "boolean"
+    },
+    "exception_type": {
+      "type": "string",
+      "enum": ["permanent", "temporary"]
+    },
+    "SecArch": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
         },
-        "role": {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "enum": ["UAA", "owner", "contributor"]
-            }
+        "date_added": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "ActionPlan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
         },
-        "environment": {
-            "type": "string",
-            "enum": ["Prod", "QA", "UAT", "Dev"]
-        },
-        "dynamic": {
-            "type": "boolean"
-        },
-        "dynamic_scope": {
-            "type": "boolean"
-        },
-        "exception_type": {
-            "type": "string",
-            "enum": ["permanent", "dynamic"]
+        "date_added": {
+          "type": "string",
+          "format": "date-time"
         },
         "expiration_date": {
-            "type": "string",
-            "format": "date-time"
-        },
-        "takeawayid": {
-            "type": "string"
-        },
-        "azurecontainerdeptid": {
-            "type": "string"
+          "type": "string",
+          "format": "date-time"
         }
+      }
     },
-    "required": [
-        "spnname_patterns", 
-        "SPNdeptID", 
-        "containertype", 
-        "role", 
-        "environment", 
-        "dynamic", 
-        "dynamic_scope", 
-        "exception_type"
-    ],
-    "dependencies": {
-        "takeawayid": ["expiration_date"]
+    "AzScopeEonid": {
+      "type": "string"
+    },
+    "AzScopeObjectid": {
+      "type": "string"
     }
+  },
+  "required": [
+    "spnname_patterns",
+    "azureScopeName_patterns",
+    "spnEonid",
+    "azureScopeType",
+    "role",
+    "environment",
+    "dynamic",
+    "dynamic_scope",
+    "exception_type",
+    "AzScopeEonid",
+    "AzScopeObjectid"
+  ],
+  "dependencies": {
+    "ActionPlan": ["expiration_date"]
+  }
 }
