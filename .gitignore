@@ -1,1 +1,33 @@
-test_*.json
+function Filter-Exceptions {
+    param (
+        [array]$data,  # Array of custom objects
+        [array]$exceptions  # Array of exceptions to filter against
+    )
+
+    # Create an empty array to hold filtered results
+    $filteredResults = @()
+
+    # Loop through each item in the data array
+    foreach ($item in $data) {
+        # Check if the current item matches any exception
+        $isException = $false
+        foreach ($exception in $exceptions) {
+            # Wildcard filtering and role matching
+            if (($item.AppObjectId -eq $exception.spn_object_id -and
+                $item.AppEonId -eq $exception.spn_eonid) -or
+                ($item.AppDisplayName -like "*$($exception.spnNameLike)*") -or
+                ($item.ObjectName -like "*$($exception.azureObjectNameLike)*") -or
+                ($exception.roles -contains $item.PrivRole.ToLower())) {
+                $isException = $true
+                break  # Exit the loop if a match is found
+            }
+        }
+
+        # If no exceptions were found, add the item to the results
+        if (-not $isException) {
+            $filteredResults += $item
+        }
+    }
+
+    return $filteredResults
+}
