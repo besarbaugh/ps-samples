@@ -1,8 +1,14 @@
-function Filter-Exceptions {
+function Subtract-Exceptions {
     param (
-        [array]$data,  # Array of custom objects
-        [array]$exceptions  # Array of exceptions to filter against
+        [array]$data
+        [string]$exceptionsJsonPath  # Path to the JSON file containing the exceptions
     )
+
+    # Load data from the CSV file
+    $data = Import-Csv -Path $csvPath
+
+    # Load exceptions from the JSON file
+    $exceptions = Get-Content -Path $exceptionsJsonPath | ConvertFrom-Json
 
     # Create an empty array to hold filtered results
     $filteredResults = @()
@@ -12,7 +18,7 @@ function Filter-Exceptions {
         # Check if the current item matches any exception
         $isException = $false
         foreach ($exception in $exceptions) {
-            # Wildcard filtering and role matching
+            # Match conditions based on AppObjectId, AppEonId, and roles
             if (($item.AppObjectId -eq $exception.spn_object_id -and
                 $item.AppEonId -eq $exception.spn_eonid) -or
                 ($item.AppDisplayName -like "*$($exception.spnNameLike)*") -or
