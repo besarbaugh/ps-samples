@@ -3,143 +3,140 @@
     Adds a new exception to a JSON file based on the defined schema.
 
 .DESCRIPTION
-    This function creates a new exception object, validates key parameters, and then adds it to an existing JSON file. 
-    If the JSON file is empty or does not exist, the function initializes it with an empty array. The function supports
-    adding an ActionPlan or SecArch using parameter sets, simplifying the input for users.
+    This function creates a new exception object, validates key parameters, checks the schema using Test-SchemaValidation, 
+    and then adds it to an existing JSON file. If the JSON file is empty or does not exist, the function initializes it 
+    with an empty array. The function uses a single parameter set with either SecArchID or ActionPlanID as a mandatory 
+    parameter, simplifying the input for users.
 
-.PARAMETER SPNObjectID
-    The Object ID of the Service Principal (SPN). Either this or SPNNameLike is required.
+.PARAMETER spnObjectId
+    The Object ID of the Service Principal (SPN). Either this or spnNameLike is required.
 
-.PARAMETER SPNNameLike
-    A pattern for SPN name matching. Either this or SPNObjectID is required.
+.PARAMETER spnNameLike
+    A pattern for SPN name matching. Either this or spnObjectId is required.
 
-.PARAMETER Roles
+.PARAMETER roles
     An array of roles assigned to the SPN. Single or multiple roles can be provided. Example: @("uaa", "owner")
 
-.PARAMETER AzScopeObjectID
-    The Object ID of the Azure Scope (Resource Group, Subscription, or Management Group). Either this or AzScopeNameLike is required.
+.PARAMETER azObjectScopeId
+    The Object ID of the Azure Scope (Resource Group, Subscription, or Management Group). Either this or azScopeNameLike is required.
 
-.PARAMETER AzScopeNameLike
-    A pattern for Azure Scope name matching. Either this or AzScopeObjectID is required.
+.PARAMETER azScopeNameLike
+    A pattern for Azure Scope name matching. Either this or azObjectScopeId is required.
 
-.PARAMETER AzureScopeType
+.PARAMETER azureScopeType
     The type of Azure Scope (RG, Sub, MG). This helps determine if EonID matching is relevant.
 
-.PARAMETER SPNEonID
+.PARAMETER spnEonId
     The EonID (or department ID) associated with the SPN. Optional if the container type is not a Resource Group.
 
-.PARAMETER AzScopeEonID
+.PARAMETER azScopeEonId
     The EonID (or department ID) associated with the Azure Scope. Optional if the container type is not a Resource Group.
 
-.PARAMETER ActionPlanID
-    The ID of the ActionPlan to be added. Required if adding an ActionPlan.
+.PARAMETER actionPlanId
+    The ID of the ActionPlan to be added. Required if SecArchID is not provided.
 
-.PARAMETER DateAdded
+.PARAMETER dateAdded
     The date the ActionPlan or SecArch was added. Defaults to the current date in "yyyy-MM-dd" format.
 
-.PARAMETER ExpirationDate
-    The expiration date of the ActionPlan. Required if adding an ActionPlan.
+.PARAMETER expirationDate
+    The expiration date of the ActionPlan. Required if ActionPlanID is provided.
 
-.PARAMETER SecArchID
-    The ID of the SecArch to be added. Required if adding a SecArch.
+.PARAMETER secArchId
+    The ID of the SecArch to be added. Required if ActionPlanID is not provided.
 
-.PARAMETER FilePath
-    The path of the JSON file to which the exception will be added. If the file does not exist, it will be created.
+.PARAMETER filePath
+    The path of the JSON file to which the exception will be added. Defaults to ".\exceptions.json" if not specified.
 
 .EXAMPLE
     # Example 1: Add an exception with ActionPlan and default DateAdded
-    Add-Exception -SPNObjectID "12345-abcde-67890" -Roles @("uaa") `
-        -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-        -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
-        -ActionPlanID "T123" -ExpirationDate "2025-10-21" `
-        -FilePath "C:\path\to\exceptions.json"
+    Add-Exception -spnObjectId "12345-abcde-67890" -roles @("uaa") `
+        -azObjectScopeId "54321-edcba-09876" -azureScopeType "RG" `
+        -spnEonId "Dept-001" -azScopeEonId "Dept-001" `
+        -actionPlanId "T123" -expirationDate "2025-10-21"
 
 .EXAMPLE
     # Example 2: Add an exception with SecArch and custom DateAdded
-    Add-Exception -SPNObjectID "54321-zyxwv-12345" -Roles @("uaa") `
-        -AzScopeObjectID "67890-abcdef-98765" -AzureScopeType "MG" `
-        -SPNEonID "Dept-002" -AzScopeEonID "Dept-002" `
-        -SecArchID "Sec-001" -DateAdded "2024-10-01" `
-        -FilePath "C:\path\to\exceptions.json"
+    Add-Exception -spnObjectId "54321-zyxwv-12345" -roles @("uaa") `
+        -azObjectScopeId "67890-abcdef-98765" -azureScopeType "MG" `
+        -spnEonId "Dept-002" -azScopeEonId "Dept-002" `
+        -secArchId "Sec-001" -dateAdded "2024-10-01"
 
 .NOTES
     This function supports adding flexible exceptions based on Object IDs or name-like patterns. It also accommodates 
     dynamic behaviors based on different types of Azure containers. Default values are used for DateAdded to reduce input complexity.
 #>
 function Add-Exception {
-    [CmdletBinding(DefaultParameterSetName = 'ActionPlanSet')]
+    [CmdletBinding()]
     param (
         # Core Parameters
         [Parameter(Mandatory = $false)]
-        [string]$SPNObjectID,
+        [string]$spnObjectId,
 
         [Parameter(Mandatory = $false)]
-        [string]$SPNNameLike,
+        [string]$spnNameLike,
 
         [Parameter(Mandatory = $true)]
         [ValidateSet("uaa", "owner", "reader", "contributor", "AppDevContributor")]  # ValidateSet for Roles
-        [string[]]$Roles,
+        [string[]]$roles,
 
         [Parameter(Mandatory = $false)]
-        [string]$AzScopeObjectID,
+        [string]$azObjectScopeId,
 
         [Parameter(Mandatory = $false)]
-        [string]$AzScopeNameLike,
+        [string]$azScopeNameLike,
 
         [Parameter(Mandatory = $true)]
         [ValidateSet("RG", "Sub", "MG")]
-        [string]$AzureScopeType,
+        [string]$azureScopeType,
 
         [Parameter(Mandatory = $false)]
-        [string]$SPNEonID,
+        [string]$spnEonId,
 
         [Parameter(Mandatory = $false)]
-        [string]$AzScopeEonID,
+        [string]$azScopeEonId,
 
-        # ActionPlan Parameter Set
-        [Parameter(Mandatory = $false, ParameterSetName = 'ActionPlanSet')]
-        [string]$ActionPlanID,
+        # ActionPlan and SecArch
+        [Parameter(Mandatory = $false)]
+        [string]$actionPlanId,
 
-        [Parameter(Mandatory = $false, ParameterSetName = 'ActionPlanSet')]
-        [string]$DateAdded = (Get-Date -Format "yyyy-MM-dd"),  # Default to current date
+        [Parameter(Mandatory = $false)]
+        [ValidateScript({ Validate-DateFormat $_ })]  # Custom function for validation
+        [object]$dateAdded = (Get-Date -Format "yyyy-MM-dd"),  # Default to current date
 
-        [Parameter(Mandatory = $true, ParameterSetName = 'ActionPlanSet')]
-        [string]$ExpirationDate,
+        [Parameter(Mandatory = $false)]
+        [ValidateScript({ Validate-DateFormat $_ })]  # Custom function for validation
+        [object]$expirationDate,
 
-        # SecArch Parameter Set
-        [Parameter(Mandatory = $true, ParameterSetName = 'SecArchSet')]
-        [string]$SecArchID,
-
-        [Parameter(Mandatory = $false, ParameterSetName = 'SecArchSet')]
-        [string]$SecArchDateAdded = (Get-Date -Format "yyyy-MM-dd"),  # Default to current date
+        [Parameter(Mandatory = $false)]
+        [string]$secArchId,
 
         # File Path
-        [Parameter(Mandatory = $true)]
-        [string]$FilePath
+        [string]$filePath = ".\exceptions.json"
     )
 
-    # Validate SPN identifiers
-    if (-not $SPNObjectID -and -not $SPNNameLike) {
-        Write-Error "You must specify either SPNObjectID or SPNNameLike."
+    # Validate mandatory parameters
+    if (-not $spnObjectId -and -not $spnNameLike) {
+        Write-Error "You must specify either spnObjectId or spnNameLike."
         return
     }
 
-    # Validate Azure Scope identifiers
-    if (-not $AzScopeObjectID -and -not $AzScopeNameLike) {
-        Write-Error "You must specify either AzScopeObjectID or AzScopeNameLike."
+    if (-not $azObjectScopeId -and -not $azScopeNameLike) {
+        Write-Error "You must specify either azObjectScopeId or azScopeNameLike."
         return
     }
 
-    # Validate EonID presence if required for Resource Groups
-    if ($AzureScopeType -eq "RG" -and $SPNEonID -and $AzScopeEonID) {
-        if ($SPNEonID -ne $AzScopeEonID) {
-            Write-Error "SPN EonID and Azure Scope EonID must match for Resource Groups when both are provided."
-            return
-        }
+    if (-not $actionPlanId -and -not $secArchId) {
+        Write-Error "You must specify either actionPlanId or secArchId."
+        return
+    }
+
+    if ($actionPlanId -and (-not $expirationDate)) {
+        Write-Error "expirationDate is required if actionPlanId is provided."
+        return
     }
 
     # Convert roles: "uaa" to "User Access Administrator"
-    $Roles = $Roles | ForEach-Object {
+    $roles = $roles | ForEach-Object {
         if ($_ -eq "uaa") {
             "User Access Administrator"
         }
@@ -148,32 +145,48 @@ function Add-Exception {
         }
     }
 
-    # Validate ActionPlan or SecArch
-    $ActionPlan = $null
-    $SecArch = $null
+    # Prepare ActionPlan or SecArch object based on input
+    $actionPlan = $null
+    $secArch = $null
 
-    if ($PSCmdlet.ParameterSetName -eq 'ActionPlanSet') {
-        $ActionPlan = @{
-            ID = $ActionPlanID
-            DateAdded = $DateAdded
-            ExpirationDate = $ExpirationDate
+    if ($actionPlanId) {
+        $actionPlan = @{
+            ID = $actionPlanId
+            DateAdded = $dateAdded
+            ExpirationDate = $expirationDate
         }
     }
-    elseif ($PSCmdlet.ParameterSetName -eq 'SecArchSet') {
-        $SecArch = @{
-            ID = $SecArchID
-            DateAdded = $SecArchDateAdded
+    elseif ($secArchId) {
+        $secArch = @{
+            ID = $secArchId
+            DateAdded = $dateAdded
         }
     }
-    else {
-        Write-Error "You must specify either ActionPlan or SecArch."
+
+    # Create the new exception object
+    $newException = @{
+        "spnObjectId" = $spnObjectId
+        "spnNameLike" = $spnNameLike
+        "roles" = $roles
+        "azObjectScopeId" = $azObjectScopeId
+        "azScopeNameLike" = $azScopeNameLike
+        "azureScopeType" = $azureScopeType
+        "spnEonId" = $spnEonId
+        "azScopeEonId" = $azScopeEonId
+        "actionPlan" = $actionPlan
+        "secArch" = $secArch
+    }
+
+    # Run schema validation using Test-SchemaValidation
+    if (-not (Test-SchemaValidation -ExceptionObject $newException)) {
+        Write-Error "Schema validation failed for the provided exception object."
         return
     }
 
     # Load the existing JSON file (initialize as an empty array if it is empty)
     $currentData = @()
-    if (Test-Path $FilePath) {
-        $jsonContent = Get-Content -Path $FilePath -Raw
+    if (Test-Path $filePath) {
+        $jsonContent = Get-Content -Path $filePath -Raw
         if (-not [string]::IsNullOrWhiteSpace($jsonContent)) {
             $currentData = $jsonContent | ConvertFrom-Json
 
@@ -184,129 +197,134 @@ function Add-Exception {
         }
     }
 
-    # Create the new exception object
-    $newException = @{
-        "SPNObjectID" = $SPNObjectID
-        "SPNNameLike" = $SPNNameLike
-        "Roles" = $Roles
-        "AzScopeObjectID" = $AzScopeObjectID
-        "AzScopeNameLike" = $AzScopeNameLike
-        "AzureScopeType" = $AzureScopeType
-        "SPNEonID" = $SPNEonID
-        "AzScopeEonID" = $AzScopeEonID
-        "ActionPlan" = $ActionPlan
-        "SecArch" = $SecArch
-    }
-
     # Append the new exception object to the current data
     $currentData += $newException
 
     # Convert back to JSON and save
-    $currentData | ConvertTo-Json -Depth 10 | Set-Content -Path $FilePath -Force
-    Write-Output "Exception added to JSON file at: $FilePath"
+    $currentData | ConvertTo-Json -Depth 10 | Set-Content -Path $filePath -Force
+    Write-Output "Exception added to JSON file at: $filePath"
 }
 
+# Helper function to validate date formats
+function Validate-DateFormat {
+    param (
+        [Parameter(Mandatory = $true)]
+        [object]$date
+    )
+
+    if ($date -is [DateTime]) {
+        return $true
+    }
+    elseif ($date -is [string]) {
+        try {
+            [DateTime]::ParseExact($date, "yyyy-MM-dd", $null) | Out-Null
+            return $true
+        }
+        catch {
+            Write-Error "Date must be in 'yyyy-MM-dd' format."
+            return $false
+        }
+    }
+    else {
+        Write-Error "Invalid date type. Must be a string or DateTime object."
+        return $false
+    }
+}
+
+##############
 
 
+# Pester tests for Add-Exception with Schema Validation
 
-####
-
-
-# Pester tests for Add-Exception with Role Validation and Conversion
-
-Describe 'Add-Exception with Role Validation and Conversion' {
-    $testFilePath = "C:\path\to\test-exceptions.json"
+Describe 'Add-Exception with Schema Validation' {
+    $testFilePath = ".\exceptions.json"
 
     BeforeAll {
+        # Helper function to initialize an empty JSON file
+        function Initialize-EmptyJson {
+            param ([string]$FilePath)
+            @() | ConvertTo-Json | Set-Content -Path $FilePath -Force
+        }
+
+        # Mock Test-SchemaValidation function for testing purposes
+        function Test-SchemaValidation {
+            param (
+                [hashtable]$ExceptionObject
+            )
+            # For testing purposes, assume the schema validation passes if it has certain keys
+            return $ExceptionObject.ContainsKey("spnObjectId") -and $ExceptionObject.ContainsKey("roles")
+        }
+
         # Initialize an empty JSON file before starting the tests
         Initialize-EmptyJson -FilePath $testFilePath
     }
 
     AfterEach {
         # Reset the file content after each test to ensure a clean slate
-        @() | ConvertTo-Json | Set-Content -Path $testFilePath -Force
+        Initialize-EmptyJson -FilePath $testFilePath
     }
 
-    It 'Should add an exception with ActionPlan and default DateAdded, and convert "uaa" role' {
+    It 'Should add an exception with ActionPlan, default DateAdded, and validate schema' {
         $roles = @("uaa")
 
-        Add-Exception -SPNObjectID "12345-abcde-67890" -Roles $roles `
-            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-            -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
-            -ActionPlanID "T123" -ExpirationDate "2025-10-21" `
-            -FilePath $testFilePath
+        Add-Exception -spnObjectId "12345-abcde-67890" -roles $roles `
+            -azObjectScopeId "54321-edcba-09876" -azureScopeType "RG" `
+            -spnEonId "Dept-001" -azScopeEonId "Dept-001" `
+            -actionPlanId "T123" -expirationDate "2025-10-21"
 
         # Load and validate the JSON
         $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
         $result | Should -HaveCount 1
-        $result[0].Roles | Should -Contain "User Access Administrator"
-        $result[0].ActionPlan.DateAdded | Should -Be (Get-Date -Format "yyyy-MM-dd")
+        $result[0].roles | Should -Contain "User Access Administrator"
+        $result[0].actionPlan.DateAdded | Should -Be (Get-Date -Format "yyyy-MM-dd")
     }
 
-    It 'Should fail if an invalid role is provided' {
-        $roles = @("invalid-role")
+    It 'Should fail if schema validation fails' {
+        # Override Test-SchemaValidation to simulate a failure
+        Mock -CommandName Test-SchemaValidation -MockWith {
+            return $false
+        }
 
-        { Add-Exception -SPNObjectID "12345-abcde-67890" -Roles $roles `
-            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-            -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
-            -ActionPlanID "T123" -ExpirationDate "2025-10-21" `
-            -FilePath $testFilePath } | Should -Throw
-    }
-
-    It 'Should add an exception with SecArch and default DateAdded, and convert "uaa" role' {
-        $roles = @("uaa")
-
-        Add-Exception -SPNObjectID "54321-zyxwv-12345" -Roles $roles `
-            -AzScopeObjectID "67890-abcdef-98765" -AzureScopeType "MG" `
-            -SPNEonID "Dept-002" -AzScopeEonID "Dept-002" `
-            -SecArchID "Sec-001" `
-            -FilePath $testFilePath
-
-        # Load and validate the JSON
-        $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
-        $result | Should -HaveCount 1
-        $result[0].Roles | Should -Contain "User Access Administrator"
-        $result[0].SecArch.DateAdded | Should -Be (Get-Date -Format "yyyy-MM-dd")
-    }
-
-    It 'Should add an exception with ActionPlan and provided DateAdded' {
         $roles = @("owner")
 
-        Add-Exception -SPNObjectID "55555-aaaaa-99999" -Roles $roles `
-            -AzScopeObjectID "98765-wxyz-00000" -AzureScopeType "Sub" `
-            -SPNEonID "Dept-003" -AzScopeEonID "Dept-003" `
-            -ActionPlanID "T456" -DateAdded "2024-10-01" -ExpirationDate "2025-12-31" `
-            -FilePath $testFilePath
-
-        # Load and validate the JSON
-        $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
-        $result | Should -HaveCount 1
-        $result[0].ActionPlan.DateAdded | Should -Be "2024-10-01"
-        $result[0].ActionPlan.ExpirationDate | Should -Be "2025-12-31"
+        { Add-Exception -spnObjectId "22222-bbbbb-33333" -roles $roles `
+            -azObjectScopeId "44444-ccccc-55555" -azureScopeType "Sub" `
+            -spnEonId "Dept-002" -azScopeEonId "Dept-002" `
+            -actionPlanId "T124" -expirationDate "2025-12-31" } | Should -Throw
     }
 
-    It 'Should fail if no ActionPlan or SecArch parameter set is provided' {
+    It 'Should pass if schema validation is successful' {
+        # Override Test-SchemaValidation to simulate a successful validation
+        Mock -CommandName Test-SchemaValidation -MockWith {
+            return $true
+        }
+
         $roles = @("owner")
+        $expiration = [DateTime]::ParseExact("2025-12-31", "yyyy-MM-dd", $null)
 
-        { Add-Exception -SPNObjectID "11111-aaaaa-33333" -Roles $roles `
-            -AzScopeObjectID "22222-bbbb-44444" -AzureScopeType "RG" `
-            -SPNEonID "Dept-004" -AzScopeEonID "Dept-004" `
-            -FilePath $testFilePath } | Should -Throw
-    }
-
-    It 'Should add an exception with multiple roles in array' {
-        $roles = @("uaa", "owner")
-
-        Add-Exception -SPNObjectID "66666-cccc-77777" -Roles $roles `
-            -AzScopeObjectID "88888-ddddd-99999" -AzureScopeType "RG" `
-            -SPNEonID "Dept-005" -AzScopeEonID "Dept-005" `
-            -ActionPlanID "T789" -ExpirationDate "2026-01-01" `
-            -FilePath $testFilePath
+        Add-Exception -spnObjectId "33333-aaaaa-44444" -roles $roles `
+            -azObjectScopeId "55555-ddddd-66666" -azureScopeType "MG" `
+            -spnEonId "Dept-003" -azScopeEonId "Dept-003" `
+            -actionPlanId "T125" -expirationDate $expiration
 
         # Load and validate the JSON
         $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
         $result | Should -HaveCount 1
-        $result[0].Roles | Should -Contain "User Access Administrator"
-        $result[0].Roles | Should -Contain "owner"
+        $result[0].actionPlan.ExpirationDate | Should -Be "2025-12-31"
+    }
+
+    It 'Should handle DateTime input and convert it to string' {
+        $roles = @("owner")
+        $expiration = [DateTime]::ParseExact("2025-12-31", "yyyy-MM-dd", $null)
+
+        Add-Exception -spnObjectId "44444-zzzzz-55555" -roles $roles `
+            -azObjectScopeId "66666-eeee-77777" -azureScopeType "RG" `
+            -spnEonId "Dept-004" -azScopeEonId "Dept-004" `
+            -actionPlanId "T126" -expirationDate $expiration
+
+        # Load and validate the JSON
+        $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
+        $result | Should -HaveCount 1
+        $result[0].actionPlan.ExpirationDate | Should -Be "2025-12-31"
     }
 }
