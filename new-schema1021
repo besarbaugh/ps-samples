@@ -23,18 +23,22 @@
       },
       "required": ["patterns", "match_type"]
     },
-    "spn_custom_attributes": {
+    "spn_csa": {
       "type": "object",
-      "description": "Custom security attributes for the SPN",
+      "description": "Custom security attributes for the SPN (future use)",
       "properties": {
         "department": { "type": "string" },
-        "classification": { "type": "string" },
-        "project_id": { "type": "string" }
+        "environment": { "type": "string" },
+        "eonid": { "type": "string" }
       }
     },
-    "spn_eonid": {
+    "parsed_spn_environment": {
       "type": "string",
-      "description": "Eon ID associated with the SPN"
+      "description": "Parsed environment from the SPN name until CSA rollout"
+    },
+    "parsed_spn_eonid": {
+      "type": "string",
+      "description": "Parsed EonID from the SPN name until CSA rollout"
     },
     "spn_object_id": {
       "type": "string",
@@ -56,14 +60,6 @@
         }
       },
       "required": ["patterns", "match_type"]
-    },
-    "azure_scope_custom_attributes": {
-      "type": "object",
-      "description": "Custom security attributes for the Azure container",
-      "properties": {
-        "resource_classification": { "type": "string" },
-        "resource_department": { "type": "string" }
-      }
     },
     "azure_scope_type": {
       "type": "array",
