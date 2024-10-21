@@ -1,16 +1,2 @@
 {
-  "spn_object_id": "12344",
-  "roles": [
-    "UAA"
-  ],
-  "dynamic_spn": false,
-  "dynamic_az_scope": false,
-  "spnEnv": "prod",
-  "spn_eonid": "91740",
-  "azureObjectEnv": "Prod",
-  "AzScope_eonid": "MG",
-  "spnNameLike": null,
-  "azureObjectNameLike": null,
-  "SecArch": null,
-  "ActionPlan": null
 }
