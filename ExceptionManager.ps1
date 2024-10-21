@@ -2,7 +2,7 @@
 function Add-Exception {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
         [string]$spn_object_id,  # Optional if spnNameLike is provided
 
         [Parameter(Mandatory = $false)]
