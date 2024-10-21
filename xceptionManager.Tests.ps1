@@ -71,7 +71,7 @@ Describe "ExceptionManager Helper Functions" {
 
         $loadedExceptions = Get-Exceptions
 
-        $loadedExceptions.Exceptions | Should -Not -Be $null
+        $loadedExceptions.Exceptions | Should -Not -BeNullOrEmpty
         $loadedExceptions.Exceptions.Count | Should -Be 1
     }
 
@@ -105,7 +105,7 @@ Describe "ExceptionManager Helper Functions" {
         }
         Save-Exceptions -ExceptionsList $resetExceptions
 
-        Add-Exception -SpnNamePatterns $sampleExceptionValid.spmnname_patterns `
+        Add-Exception -SpnNamePatterns $sampleExceptionValid.spnname_patterns `
                       -SPNDeptID $sampleExceptionValid.spndeptid `
                       -ContainerTypes $sampleExceptionValid.containertype `
                       -Roles $sampleExceptionValid.role `
@@ -124,7 +124,7 @@ Describe "ExceptionManager Helper Functions" {
     # Test for duplicate exception
     It "Should not add a duplicate exception" {
         # Add the initial exception
-        Add-Exception -SpnNamePatterns $sampleExceptionDuplicate.spmnname_patterns `
+        Add-Exception -SpnNamePatterns $sampleExceptionDuplicate.spnname_patterns `
                       -SPNDeptID $sampleExceptionDuplicate.spndeptid `
                       -ContainerTypes $sampleExceptionDuplicate.containertype `
                       -Roles $sampleExceptionDuplicate.role `
@@ -137,7 +137,7 @@ Describe "ExceptionManager Helper Functions" {
                       -ContainerID $sampleExceptionDuplicate.containerid
 
         # Try adding the duplicate exception
-        { Add-Exception -SpnNamePatterns $sampleExceptionDuplicate.spmnname_patterns `
+        { Add-Exception -SpnNamePatterns $sampleExceptionDuplicate.spnname_patterns `
                          -SPNDeptID $sampleExceptionDuplicate.spndeptid `
                          -ContainerTypes $sampleExceptionDuplicate.containertype `
                          -Roles $sampleExceptionDuplicate.role `
