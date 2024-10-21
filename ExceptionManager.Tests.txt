@@ -195,4 +195,22 @@ Describe "ExceptionManager Helper Functions" {
                       -ContainerID $sampleExceptionISOApproved.containerid
 
         $exceptionsAfterAdd = Get-Exceptions -FilePath $FilePath
-        $exceptionsAfterAdd.Exceptions | Wh
+        $exceptionsAfterAdd.Exceptions | Where-Object { $_.isoapprovedid -eq $sampleExceptionISOApproved.isoapprovedid } | Should -Not -BeNullOrEmpty
+    }
+
+    # Test for missing ExpirationDate when TakeawayID is provided
+    It "Should not add an exception with TakeawayID and missing ExpirationDate" {
+        { Add-Exception -SpnNamePatterns $sampleExceptionWithTakeaway.spnname_patterns `
+                         -SPNDeptID $sampleExceptionWithTakeaway.spndeptid `
+                         -ContainerTypes $sampleExceptionWithTakeaway.containertype `
+                         -Roles $sampleExceptionWithTakeaway.role `
+                         -Environment $sampleExceptionWithTakeaway.environment `
+                         -Dynamic $sampleExceptionWithTakeaway.dynamic `
+                         -DynamicScope $sampleExceptionWithTakeaway.dynamic_scope `
+                         -ExceptionType $sampleExceptionWithTakeaway.exception_type `
+                         -TakeawayID $sampleExceptionWithTakeaway.takeawayid `
+                         -ExpirationDate $null `
+                         -ContainerDeptID $sampleExceptionWithTakeaway.containerdeptid `
+                         -ContainerID $sampleExceptionWithTakeaway.containerid } | Should -Throw
+    }
+}
