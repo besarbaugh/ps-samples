@@ -93,6 +93,40 @@ function Test-DateFormat {
 
 .LINK
     https://docs.microsoft.com/en-us/powershell/scripting/overview
+
+#region Test-SchemaValidation
+function Test-SchemaValidation {
+    param (
+        [PSCustomObject]$exception
+    )
+
+    # Check for required fields
+    if (-not $exception.spn_object_id) {
+        throw "spn_object_id is required and must be a string."
+    }
+    
+    if (-not $exception.roles -or $exception.roles.Count -eq 0) {
+        throw "roles field is required and must be an array."
+    }
+
+    if (-not $exception.azScopeType) {
+        throw "azScopeType is required and must be one of: managementGroup, subscription, resourceGroup."
+    }
+
+    # Validate azScopeType value
+    $validScopeTypes = @("managementGroup", "subscription", "resourceGroup")
+    if (-not ($validScopeTypes -contains $exception.azScopeType)) {
+        throw "azScopeType must be one of: managementGroup, subscription, resourceGroup."
+    }
+
+    if ($exception.azScopeType -eq "resourceGroup" -and -not $exception.AzScope_eonid) {
+        throw "AzScope_eonid is required for resource groups."
+    }
+
+    # Additional validations can be added here as necessary
+}
+#endregion
+
 #>
 
 #region Load-Config
@@ -140,6 +174,10 @@ function Add-Exception {
 
         [string]$AzScope_eonid,  # Only required for resource groups
 
+        [ValidateSet("managementGroup", "subscription", "resourceGroup")]
+        [Parameter(Mandatory = $true)]
+        [string]$azScopeType,  # Added as a mandatory parameter
+
         [array]$spnNameLike,  # Will have * added to either side
         [array]$azureObjectNameLike  # Will have * added to either side
     )
@@ -164,7 +202,7 @@ function Add-Exception {
     $spnNameLikeWildcard = $spnNameLike | ForEach-Object { "*$_*" }
     $azureObjectNameLikeWildcard = $azureObjectNameLike | ForEach-Object { "*$_*" }
 
-    # Build the new exception object
+    # Build the new exception object with CSA and other fields
     $newException = [pscustomobject]@{
         spn_object_id       = $spn_object_id
         roles               = $roles | ForEach-Object { $_.ToLower() }  # Convert roles to lowercase
@@ -178,20 +216,7 @@ function Add-Exception {
         azureObjectNameLike = $azureObjectNameLikeWildcard
         SecArch             = $SecArch
         ActionPlan          = $ActionPlan
-    }
-
-    # Rename properties for JSON output
-    if ($newException.AzureScope_eonid -ne $null) {
-        $newException.AzureScope_eonid = $newException.AzureScope_eonid
-    }
-
-    # Determine the correct type for JSON output
-    if ($newException.spn_object_id -like "*/") {
-        $newException.ObjectType = "resourceGroup"  # or "subscription" based on your context
-    } elseif ($newException.spn_object_id -like "*/managementGroups/*") {
-        $newException.ObjectType = "managementGroup"
-    } else {
-        $newException.ObjectType = "subscription"
+        azScopeType         = $azScopeType  # Store the validated scope type
     }
 
     # Add the new exception to the list
