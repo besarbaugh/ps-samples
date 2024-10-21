@@ -157,3 +157,83 @@ function Match-ByEnvironment {
 
     return ($ExceptionEnv -and $ObjectEnv -eq $ExceptionEnv)
 }
+
+<#
+.SYNOPSIS
+    Determines if the given outObject matches any exceptions from the JSON file.
+
+.DESCRIPTION
+    This function loads a list of exceptions from a JSON file and applies comprehensive rules to determine if the
+    given outObject matches any of these exceptions. It utilizes helper functions for each type of comparison.
+
+.PARAMETER OutObject
+    A PowerShell object that represents the current entry being checked.
+
+.PARAMETER ExceptionsFilePath
+    The path to the JSON file that contains the list of exceptions.
+
+.EXAMPLE
+    $isException = Is-Exception -OutObject $myOutObject -ExceptionsFilePath "C:\path\to\exceptions.json"
+    # Returns $true if the outObject matches any exceptions.
+
+.NOTES
+    This function combines logic from multiple helper functions to perform a comprehensive check against all exceptions.
+#>
+function Is-Exception {
+    param (
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$OutObject,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExceptionsFilePath
+    )
+
+    # Load exceptions from the JSON file
+    $exceptions = @()
+    if (Test-Path $ExceptionsFilePath) {
+        $exceptions = Get-Content -Path $ExceptionsFilePath -Raw | ConvertFrom-Json
+    }
+
+    # Loop through each exception and apply comprehensive rules for comparison
+    foreach ($exception in $exceptions) {
+        # Initialize match status
+        $isMatch = $false
+
+        # Apply individual match checks based on schema logic
+        if (Match-ByObjectID -ObjectID $OutObject.AppObjectID -ExceptionObjectID $exception.SPNObjectID) {
+            $isMatch = $true
+        }
+
+        if (Match-ByNameLike -ObjectName $OutObject.AppDisplayName -ExceptionNameLike $exception.SPNNameLike) {
+            $isMatch = $true
+        }
+
+        if (Match-ByObjectID -ObjectID $OutObject.AzureObjeccScopeID -ExceptionObjectID $exception.AzScopeObjectID) {
+            $isMatch = $true
+        }
+
+        if (Match-ByNameLike -ObjectName $OutObject.ObjectName -ExceptionNameLike $exception.AzScopeNameLike) {
+            $isMatch = $true
+        }
+
+        if (Match-ByEonID -ObjectEonID $OutObject.AppEONID -ExceptionEonID $exception.SPNEonID) {
+            $isMatch = $true
+        }
+
+        if (Match-ByRole -ObjectRole $OutObject.PrivRole -ExceptionRole $exception.Role) {
+            $isMatch = $true
+        }
+
+        if (Match-ByEnvironment -ObjectEnv $OutObject.Env -ExceptionEnv $exception.Env) {
+            $isMatch = $true
+        }
+
+        # If any matches are found, return true indicating an exception
+        if ($isMatch) {
+            return $true
+        }
+    }
+
+    # If no matches found, return false indicating not an exception
+    return $false
+}
