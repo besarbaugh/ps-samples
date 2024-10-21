@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Adds a new exception to the exception list based on the defined schema.
+    Adds a new exception to a JSON file based on the defined schema.
 
 .DESCRIPTION
-    This function creates a new exception object and adds it to the exception list. It validates key parameters based on 
-    the defined schema and enforces rules like mandatory fields, conditional EonID checks, and either ActionPlan or SecArch.
+    This function creates a new exception object, validates key parameters, and then adds it to an existing JSON file. 
+    If the JSON file is empty or does not exist, the function initializes it with an empty array.
 
 .PARAMETER SPNObjectID
     The Object ID of the Service Principal (SPN). Either this or SPNNameLike is required.
@@ -36,16 +36,21 @@
 .PARAMETER SecArch
     A hashtable that contains fields like ID and DateAdded. Optional if ActionPlan is provided.
 
+.PARAMETER FilePath
+    The path of the JSON file to which the exception will be added. If the file does not exist, it will be created.
+
 .EXAMPLE
     # Example 1: Add an exception with SPN and Azure Scope Object IDs for a Resource Group
     Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" -AzScopeObjectID "54321-edcba-09876" `
         -AzureScopeType "RG" -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
-        -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" }
+        -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } `
+        -FilePath "C:\path\to\exceptions.json"
 
     # Example 2: Add an exception using name-like patterns for a Management Group with SecArch
     Add-Exception -SPNNameLike "*admin-spn*" -Role "AppDevContributor" `
         -AzScopeNameLike "*core-mg*" -AzureScopeType "MG" `
-        -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" }
+        -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" } `
+        -FilePath "C:\path\to\exceptions.json"
 
 .NOTES
     This function supports adding flexible exceptions based on Object IDs or name-like patterns. 
@@ -84,7 +89,10 @@ function Add-Exception {
         [hashtable]$ActionPlan,
 
         [Parameter(Mandatory = $false)]
-        [hashtable]$SecArch
+        [hashtable]$SecArch,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
     )
 
     # Validate SPN identifiers
@@ -129,8 +137,17 @@ function Add-Exception {
         }
     }
 
-    # Create and add the exception (this is a placeholder for the actual logic to add it to your data store)
-    $exception = @{
+    # Load the existing JSON file (initialize as an empty array if it is empty)
+    $currentData = @()
+    if (Test-Path $FilePath) {
+        $jsonContent = Get-Content -Path $FilePath -Raw
+        if (-not [string]::IsNullOrWhiteSpace($jsonContent)) {
+            $currentData = $jsonContent | ConvertFrom-Json
+        }
+    }
+
+    # Create the new exception object
+    $newException = @{
         "SPNObjectID" = $SPNObjectID
         "SPNNameLike" = $SPNNameLike
         "Role" = $Role
@@ -143,80 +160,148 @@ function Add-Exception {
         "SecArch" = $SecArch
     }
 
-    # Output the created exception (for now)
-    Write-Output $exception
+    # Append the new exception object to the current data
+    $currentData += $newException
+
+    # Convert back to JSON and save
+    $currentData | ConvertTo-Json -Depth 10 | Set-Content -Path $FilePath -Force
+    Write-Output "Exception added to JSON file at: $FilePath"
 }
 
+<#
+EXAMPLE: 
 
-##
+$actionPlan = @{
+    ID = "T123"
+    DateAdded = "2024-10-21"
+    ExpirationDate = "2025-10-21"
+}
 
-# Unit test script using Pester
+Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" -AzScopeObjectID "54321-edcba-09876" `
+    -AzureScopeType "RG" -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
+    -ActionPlan $actionPlan -FilePath "C:\path\to\exceptions.json"
+
+
+
+#>
+
+
+
+#######
+
+
+# Pester unit test for Add-Exception function
 Describe 'Add-Exception' {
-    It 'Should successfully add an exception with valid inputs for RG' {
-        $result = Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
-            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-            -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
-            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" }
-        $result | Should -Not -BeNullOrEmpty
-        $result.SPNEonID | Should -Be "Dept-001"
-        $result.AzScopeObjectID | Should -Be "54321-edcba-09876"
+    $testFilePath = "C:\path\to\test-exceptions.json"
+
+    BeforeAll {
+        # Initialize an empty JSON file before starting the tests
+        Initialize-EmptyJson -FilePath $testFilePath
     }
 
-    It 'Should successfully add an exception using name-like patterns for MG with SecArch' {
-        $result = Add-Exception -SPNNameLike "*admin-spn*" -Role "AppDevContributor" `
-            -AzScopeNameLike "*core-mg*" -AzureScopeType "MG" `
-            -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" }
-        $result | Should -Not -BeNullOrEmpty
-        $result.AzureScopeType | Should -Be "MG"
-        $result.SecArch.ID | Should -Be "Sec-123"
+    AfterEach {
+        # Reset the file content after each test to ensure clean slate
+        @() | ConvertTo-Json | Set-Content -Path $testFilePath -Force
+    }
+
+    It 'Should successfully add an exception with valid inputs for RG' {
+        $actionPlan = @{
+            ID = "T123"
+            DateAdded = "2024-10-21"
+            ExpirationDate = "2025-10-21"
+        }
+
+        Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
+            -ActionPlan $actionPlan -FilePath $testFilePath
+
+        # Load and validate the added exception
+        $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
+        $result | Should -HaveCount 1
+        $result[0].SPNObjectID | Should -Be "12345-abcde-67890"
+        $result[0].Role | Should -Be "Owner"
+        $result[0].ActionPlan.ID | Should -Be "T123"
     }
 
     It 'Should fail if neither ActionPlan nor SecArch is provided' {
-        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
-            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "Sub" }
-        $result | Should -Throw
+        { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "Sub" `
+            -FilePath $testFilePath } | Should -Throw
     }
 
     It 'Should fail if EonID fields do not match for RG when both are provided' {
-        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+        $actionPlan = @{
+            ID = "T123"
+            DateAdded = "2024-10-21"
+            ExpirationDate = "2025-10-21"
+        }
+
+        { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
             -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
             -SPNEonID "Dept-001" -AzScopeEonID "Dept-002" `
-            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } }
-        $result | Should -Throw
+            -ActionPlan $actionPlan -FilePath $testFilePath } | Should -Throw
     }
 
-    It 'Should successfully add an exception without EonID for MG' {
-        $result = Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
-            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "MG" `
-            -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" }
-        $result | Should -Not -BeNullOrEmpty
-        $result.AzureScopeType | Should -Be "MG"
+    It 'Should successfully add an exception using name-like patterns for MG with SecArch' {
+        $secArch = @{
+            ID = "Sec-123"
+            DateAdded = "2024-10-21"
+        }
+
+        Add-Exception -SPNNameLike "*admin-spn*" -Role "AppDevContributor" `
+            -AzScopeNameLike "*core-mg*" -AzureScopeType "MG" `
+            -SecArch $secArch -FilePath $testFilePath
+
+        # Load and validate the added exception
+        $result = Get-Content -Path $testFilePath -Raw | ConvertFrom-Json
+        $result | Should -HaveCount 1
+        $result[0].SPNNameLike | Should -Be "*admin-spn*"
+        $result[0].Role | Should -Be "AppDevContributor"
+        $result[0].SecArch.ID | Should -Be "Sec-123"
     }
 
     It 'Should fail if neither SPNObjectID nor SPNNameLike is provided' {
-        $result = { Add-Exception -Role "Owner" -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } }
-        $result | Should -Throw
+        $actionPlan = @{
+            ID = "T123"
+            DateAdded = "2024-10-21"
+            ExpirationDate = "2025-10-21"
+        }
+
+        { Add-Exception -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -ActionPlan $actionPlan -FilePath $testFilePath } | Should -Throw
     }
 
     It 'Should fail if neither AzScopeObjectID nor AzScopeNameLike is provided' {
-        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
-            -AzureScopeType "RG" -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } }
-        $result | Should -Throw
+        $actionPlan = @{
+            ID = "T123"
+            DateAdded = "2024-10-21"
+            ExpirationDate = "2025-10-21"
+        }
+
+        { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzureScopeType "RG" -ActionPlan $actionPlan -FilePath $testFilePath } | Should -Throw
     }
 
     It 'Should fail if mandatory ActionPlan fields are missing' {
-        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+        $actionPlan = @{
+            ID = "T123"
+            DateAdded = "2024-10-21"
+        }
+
+        { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
             -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21" } }
-        $result | Should -Throw
+            -ActionPlan $actionPlan -FilePath $testFilePath } | Should -Throw
     }
 
     It 'Should fail if mandatory SecArch fields are missing' {
-        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+        $secArch = @{
+            ID = "Sec-123"
+        }
+
+        { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
             -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
-            -SecArch @{ ID = "Sec-123" } }
-        $result | Should -Throw
+            -SecArch $secArch -FilePath $testFilePath } | Should -Throw
     }
 }
-
