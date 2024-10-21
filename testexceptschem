@@ -1,70 +1,57 @@
 <#
 .SYNOPSIS
-    Validates an exception against a defined schema and business rules.
+    Validates an exception object against the defined schema.
 
 .DESCRIPTION
-    The `Test-Exception` function checks if the provided exception matches the expected schema and validates key attributes 
-    such as SPN Object ID, SPN EonID, Azure Scope Type, and other custom security attributes. 
-    It helps to ensure that exceptions are correctly formed and in line with the required rules.
+    This function checks if the input exception follows a specific schema, ensuring that all mandatory fields 
+    are present and that the fields conform to expected formats and relationships. It conditionally validates EonIDs 
+    based on the container type (e.g., Resource Groups, Subscriptions, or Management Groups).
 
 .PARAMETER Exception
-    A hashtable or JSON object containing the exception details. 
-    It must follow the defined schema (e.g., SPN Object ID, SPN Name Like, Role, AzScope Object ID, AzScope EonID, etc.).
-
-.PARAMETER DynamicSPN
-    Specifies whether the SPN in the exception is dynamic. Default is `$false`. When set to `$true`, additional checks are applied.
-
-.PARAMETER DynamicAzureScope
-    Specifies whether the Azure Scope in the exception is dynamic. Default is `$false`. When set to `$true`, additional checks are applied.
-
-.PARAMETER Environment
-    The environment to check against (e.g., Prod, NonProd). Mandatory for verifying role assignments.
+    A hashtable or JSON object containing the exception details. The function will validate if this object 
+    conforms to the expected schema.
 
 .EXAMPLE
-    # Example 1: Simple single SPN exception
+    # Example 1: Validate exception with relevant EonID for Resource Group
     $exception = @{
         "spn_object_id" = "12345-abcde-67890"
         "AzScope_objectid" = "54321-edcba-09876"
         "Role" = "Owner"
         "spn_eonid" = "Dept-001"
         "AzScope_eonid" = "Dept-001"
+        "azure_scope_type" = "RG"
+        "ActionPlan" = @{
+            "ID" = "T123"
+            "DateAdded" = "2024-10-21"
+            "ExpirationDate" = "2025-10-21"
+        }
     }
-    Test-Exception -Exception $exception
+    Test-SchemaValidation -Exception $exception
 
-    # Example 2: Name Like Example
+    # Example 2: Validate exception without EonID since it’s not relevant for MG
     $exception = @{
-        "spn_name_like" = "*admin-spn*"
-        "AzScope_name_like" = "*core-rg*"
-        "Role" = "AppDevContributor"
-        "Environment" = "NonProd"
+        "spn_object_id" = "12345-abcde-67890"
+        "AzScope_objectid" = "54321-edcba-09876"
+        "Role" = "Owner"
+        "azure_scope_type" = "MG"
     }
-    Test-Exception -Exception $exception
+    Test-SchemaValidation -Exception $exception
 
 .NOTES
-    Ensure that you provide either SPN Object ID or SPN Name Like values.
-    Also, remember to match eonid (department ID) between SPNs and Azure scopes when required.
-
+    The function expects either SPN Object ID or SPN Name Like values.
+    It also validates ActionPlan to include mandatory fields if it exists.
 #>
 
-function Test-Exception {
+function Test-SchemaValidation {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [hashtable]$Exception,
-
-        [Parameter()]
-        [bool]$DynamicSPN = $false,
-
-        [Parameter()]
-        [bool]$DynamicAzureScope = $false,
-
-        [Parameter()]
-        [string]$Environment
+        [hashtable]$Exception
     )
 
     # Validate mandatory fields based on schema
     if (-not $Exception.ContainsKey('spn_object_id') -and -not $Exception.ContainsKey('spn_name_like')) {
-        Write-Error "An exception must include either an SPN Object ID or a 'spn_name_like' value."
+        Write-Error "An exception must include either an SPN Object ID or 'spn_name_like'."
         return $false
     }
 
@@ -73,25 +60,112 @@ function Test-Exception {
         return $false
     }
 
-    # Optional: Validate eonid matching logic (if applicable)
-    if ($Exception.ContainsKey('spn_eonid') -and $Exception.ContainsKey('AzScope_eonid')) {
+    # Validate EonID logic based on container type (only for Resource Groups)
+    if ($Exception.ContainsKey('azure_scope_type') -and $Exception['azure_scope_type'] -eq "RG") {
+        if (-not $Exception.ContainsKey('spn_eonid') -or -not $Exception.ContainsKey('AzScope_eonid')) {
+            Write-Error "EonID values are required for Resource Groups."
+            return $false
+        }
         if ($Exception['spn_eonid'] -ne $Exception['AzScope_eonid']) {
-            Write-Error "SPN EonID and Azure Scope EonID must match."
+            Write-Error "SPN EonID and Azure Scope EonID must match for Resource Groups."
             return $false
         }
     }
 
-    # Validate environment requirements (if provided)
-    if ($null -ne $Environment -and $Environment -notin @('Prod', 'NonProd')) {
-        Write-Error "Invalid environment specified. Must be 'Prod' or 'NonProd'."
-        return $false
-    }
-
-    # Validate dynamic behaviors if set
-    if ($DynamicSPN -and $DynamicAzureScope) {
-        Write-Output "Warning: Both SPN and Azure Scope are marked as dynamic. Ensure this is intentional."
+    # Validate ActionPlan if present
+    if ($Exception.ContainsKey('ActionPlan')) {
+        $actionPlan = $Exception['ActionPlan']
+        if (-not $actionPlan.ContainsKey('ID') -or -not $actionPlan.ContainsKey('DateAdded') -or -not $actionPlan.ContainsKey('ExpirationDate')) {
+            Write-Error "ActionPlan must include ID, DateAdded, and ExpirationDate."
+            return $false
+        }
     }
 
     Write-Output "Exception validated successfully."
     return $true
+}
+###############
+
+
+# Unit test script using Pester
+Describe 'Test-SchemaValidation' {
+    It 'Should return true for a valid exception with relevant EonID for Resource Group' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "spn_eonid" = "Dept-001"
+            "AzScope_eonid" = "Dept-001"
+            "azure_scope_type" = "RG"
+            "ActionPlan" = @{
+                "ID" = "T123"
+                "DateAdded" = "2024-10-21"
+                "ExpirationDate" = "2025-10-21"
+            }
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $true
+    }
+
+    It 'Should return true for valid exception without EonID for MG' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "azure_scope_type" = "MG"
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $true
+    }
+
+    It 'Should return false for missing EonID when relevant for RG' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "azure_scope_type" = "RG"
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $false
+    }
+
+    It 'Should return false for mismatched EonID when relevant for RG' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "spn_eonid" = "Dept-001"
+            "AzScope_eonid" = "Dept-002"
+            "azure_scope_type" = "RG"
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $false
+    }
+
+    It 'Should return false for missing Role' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "azure_scope_type" = "RG"
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $false
+    }
+
+    It 'Should return false for missing ActionPlan fields' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "spn_eonid" = "Dept-001"
+            "AzScope_eonid" = "Dept-001"
+            "azure_scope_type" = "RG"
+            "ActionPlan" = @{
+                "ID" = "T123"
+                "DateAdded" = "2024-10-21"
+            }
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $false
+    }
 }
