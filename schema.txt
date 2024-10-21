@@ -19,7 +19,7 @@
       },
       "required": ["patterns", "match_type"]
     },
-    "azureScopeName_patterns": {
+    "azure_scope_name_patterns": {
       "type": "object",
       "properties": {
         "patterns": {
@@ -35,10 +35,10 @@
       },
       "required": ["patterns", "match_type"]
     },
-    "spnEonid": {
+    "spn_eonid": {
       "type": "string"
     },
-    "azureScopeType": {
+    "azure_scope_type": {
       "type": "array",
       "items": {
         "type": "string",
@@ -49,17 +49,17 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["UAA", "owner", "contributor"]
+        "enum": ["User Access Administrator", "Owner", "Contributor", "AppDevContributor"]
       }
     },
     "environment": {
       "type": "string",
       "enum": ["Prod", "QA", "UAT", "Dev"]
     },
-    "dynamic": {
+    "dynamic_spn": {
       "type": "boolean"
     },
-    "dynamic_scope": {
+    "dynamic_azure_scope": {
       "type": "boolean"
     },
     "exception_type": {
@@ -94,25 +94,25 @@
         }
       }
     },
-    "AzScopeEonid": {
+    "az_scope_eonid": {
       "type": "string"
     },
-    "AzScopeObjectid": {
+    "az_scope_objectid": {
       "type": "string"
     }
   },
   "required": [
     "spnname_patterns",
-    "azureScopeName_patterns",
-    "spnEonid",
-    "azureScopeType",
+    "azure_scope_name_patterns",
+    "spn_eonid",
+    "azure_scope_type",
     "role",
     "environment",
-    "dynamic",
-    "dynamic_scope",
+    "dynamic_spn",
+    "dynamic_azure_scope",
     "exception_type",
-    "AzScopeEonid",
-    "AzScopeObjectid"
+    "az_scope_eonid",
+    "az_scope_objectid"
   ],
   "dependencies": {
     "ActionPlan": ["expiration_date"]
