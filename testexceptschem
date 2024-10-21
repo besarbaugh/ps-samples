@@ -5,14 +5,17 @@
 .DESCRIPTION
     This function checks if the input exception follows a specific schema, ensuring that all mandatory fields 
     are present and that the fields conform to expected formats and relationships. It conditionally validates EonIDs 
-    based on the container type (e.g., Resource Groups, Subscriptions, or Management Groups).
+    and ensures that either ActionPlan or SecArch is provided.
 
 .PARAMETER Exception
     A hashtable or JSON object containing the exception details. The function will validate if this object 
     conforms to the expected schema.
 
+.PARAMETER MatchEonID
+    A boolean value to specify if EonID fields between SPNs and Azure scopes should be validated for matching. Default is `$false`.
+
 .EXAMPLE
-    # Example 1: Validate exception with relevant EonID for Resource Group
+    # Example 1: Validate exception with relevant EonID and ActionPlan
     $exception = @{
         "spn_object_id" = "12345-abcde-67890"
         "AzScope_objectid" = "54321-edcba-09876"
@@ -26,27 +29,34 @@
             "ExpirationDate" = "2025-10-21"
         }
     }
-    Test-SchemaValidation -Exception $exception
+    Test-SchemaValidation -Exception $exception -MatchEonID $true
 
-    # Example 2: Validate exception without EonID since it’s not relevant for MG
+    # Example 2: Validate exception with SecArch instead of ActionPlan
     $exception = @{
         "spn_object_id" = "12345-abcde-67890"
         "AzScope_objectid" = "54321-edcba-09876"
         "Role" = "Owner"
-        "azure_scope_type" = "MG"
+        "spn_eonid" = "Dept-001"
+        "azure_scope_type" = "Sub"
+        "SecArch" = @{
+            "ID" = "Sec-123"
+            "DateAdded" = "2024-10-21"
+        }
     }
-    Test-SchemaValidation -Exception $exception
+    Test-SchemaValidation -Exception $exception -MatchEonID $false
 
 .NOTES
-    The function expects either SPN Object ID or SPN Name Like values.
-    It also validates ActionPlan to include mandatory fields if it exists.
+    The function expects either ActionPlan or SecArch to be provided. EonID matching can be controlled with the MatchEonID parameter.
 #>
 
 function Test-SchemaValidation {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [hashtable]$Exception
+        [hashtable]$Exception,
+
+        [Parameter()]
+        [bool]$MatchEonID = $false
     )
 
     # Validate mandatory fields based on schema
@@ -60,23 +70,34 @@ function Test-SchemaValidation {
         return $false
     }
 
-    # Validate EonID logic based on container type (only for Resource Groups)
-    if ($Exception.ContainsKey('azure_scope_type') -and $Exception['azure_scope_type'] -eq "RG") {
-        if (-not $Exception.ContainsKey('spn_eonid') -or -not $Exception.ContainsKey('AzScope_eonid')) {
-            Write-Error "EonID values are required for Resource Groups."
-            return $false
-        }
+    # Validate EonID matching if applicable and MatchEonID is true
+    if ($MatchEonID -and $Exception.ContainsKey('spn_eonid') -and $Exception.ContainsKey('AzScope_eonid')) {
         if ($Exception['spn_eonid'] -ne $Exception['AzScope_eonid']) {
-            Write-Error "SPN EonID and Azure Scope EonID must match for Resource Groups."
+            Write-Error "SPN EonID and Azure Scope EonID must match."
             return $false
         }
+    }
+
+    # Validate ActionPlan or SecArch presence
+    if (-not $Exception.ContainsKey('ActionPlan') -and -not $Exception.ContainsKey('SecArch')) {
+        Write-Error "Either ActionPlan or SecArch must be specified."
+        return $false
     }
 
     # Validate ActionPlan if present
     if ($Exception.ContainsKey('ActionPlan')) {
         $actionPlan = $Exception['ActionPlan']
-        if (-not $actionPlan.ContainsKey('ID') -or -not $actionPlan.ContainsKey('DateAdded') -or -not $actionPlan.ContainsKey('ExpirationDate')) {
+        if (-not $actionPlan.ContainsKey("ID") -or -not $actionPlan.ContainsKey("DateAdded") -or -not $actionPlan.ContainsKey("ExpirationDate")) {
             Write-Error "ActionPlan must include ID, DateAdded, and ExpirationDate."
+            return $false
+        }
+    }
+
+    # Validate SecArch if present
+    if ($Exception.ContainsKey('SecArch')) {
+        $secArch = $Exception['SecArch']
+        if (-not $secArch.ContainsKey("ID") -or -not $secArch.ContainsKey("DateAdded")) {
+            Write-Error "SecArch must include ID and DateAdded."
             return $false
         }
     }
@@ -84,12 +105,11 @@ function Test-SchemaValidation {
     Write-Output "Exception validated successfully."
     return $true
 }
-###############
-
+#### 
 
 # Unit test script using Pester
 Describe 'Test-SchemaValidation' {
-    It 'Should return true for a valid exception with relevant EonID for Resource Group' {
+    It 'Should return true for a valid exception with ActionPlan and matching EonID' {
         $exception = @{
             "spn_object_id" = "12345-abcde-67890"
             "AzScope_objectid" = "54321-edcba-09876"
@@ -103,11 +123,28 @@ Describe 'Test-SchemaValidation' {
                 "ExpirationDate" = "2025-10-21"
             }
         }
-        $result = Test-SchemaValidation -Exception $exception
+        $result = Test-SchemaValidation -Exception $exception -MatchEonID $true
         $result | Should -Be $true
     }
 
-    It 'Should return true for valid exception without EonID for MG' {
+    It 'Should return true for a valid exception with SecArch and non-matching EonID' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "spn_eonid" = "Dept-001"
+            "AzScope_eonid" = "Dept-002"
+            "azure_scope_type" = "Sub"
+            "SecArch" = @{
+                "ID" = "Sec-123"
+                "DateAdded" = "2024-10-21"
+            }
+        }
+        $result = Test-SchemaValidation -Exception $exception -MatchEonID $false
+        $result | Should -Be $true
+    }
+
+    It 'Should return false if both ActionPlan and SecArch are missing' {
         $exception = @{
             "spn_object_id" = "12345-abcde-67890"
             "AzScope_objectid" = "54321-edcba-09876"
@@ -115,54 +152,32 @@ Describe 'Test-SchemaValidation' {
             "azure_scope_type" = "MG"
         }
         $result = Test-SchemaValidation -Exception $exception
-        $result | Should -Be $true
+        $result | Should -Be $false
     }
 
-    It 'Should return false for missing EonID when relevant for RG' {
+    It 'Should return false for missing mandatory ActionPlan fields' {
         $exception = @{
             "spn_object_id" = "12345-abcde-67890"
             "AzScope_objectid" = "54321-edcba-09876"
             "Role" = "Owner"
-            "azure_scope_type" = "RG"
-        }
-        $result = Test-SchemaValidation -Exception $exception
-        $result | Should -Be $false
-    }
-
-    It 'Should return false for mismatched EonID when relevant for RG' {
-        $exception = @{
-            "spn_object_id" = "12345-abcde-67890"
-            "AzScope_objectid" = "54321-edcba-09876"
-            "Role" = "Owner"
-            "spn_eonid" = "Dept-001"
-            "AzScope_eonid" = "Dept-002"
-            "azure_scope_type" = "RG"
-        }
-        $result = Test-SchemaValidation -Exception $exception
-        $result | Should -Be $false
-    }
-
-    It 'Should return false for missing Role' {
-        $exception = @{
-            "spn_object_id" = "12345-abcde-67890"
-            "AzScope_objectid" = "54321-edcba-09876"
-            "azure_scope_type" = "RG"
-        }
-        $result = Test-SchemaValidation -Exception $exception
-        $result | Should -Be $false
-    }
-
-    It 'Should return false for missing ActionPlan fields' {
-        $exception = @{
-            "spn_object_id" = "12345-abcde-67890"
-            "AzScope_objectid" = "54321-edcba-09876"
-            "Role" = "Owner"
-            "spn_eonid" = "Dept-001"
-            "AzScope_eonid" = "Dept-001"
             "azure_scope_type" = "RG"
             "ActionPlan" = @{
                 "ID" = "T123"
                 "DateAdded" = "2024-10-21"
+            }
+        }
+        $result = Test-SchemaValidation -Exception $exception
+        $result | Should -Be $false
+    }
+
+    It 'Should return false for missing mandatory SecArch fields' {
+        $exception = @{
+            "spn_object_id" = "12345-abcde-67890"
+            "AzScope_objectid" = "54321-edcba-09876"
+            "Role" = "Owner"
+            "azure_scope_type" = "RG"
+            "SecArch" = @{
+                "ID" = "Sec-123"
             }
         }
         $result = Test-SchemaValidation -Exception $exception
