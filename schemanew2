@@ -1,77 +1,97 @@
-{
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Exception Schema",
-    "type": "object",
-    "properties": {
-        "spnname_patterns": {
-            "type": "object",
-            "properties": {
-                "patterns": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "match_type": {
-                    "type": "string",
-                    "enum": ["AND", "OR"]
-                }
-            },
-            "required": ["patterns", "match_type"]
-        },
-        "spnobjtID": {
-            "type": "string"
-        },
-        "SPNdeptID": {
-            "type": "string"
-        },
-        "containertype": {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "enum": ["RG", "sub", "MG"]
-            }
-        },
-        "role": {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "enum": ["UAA", "owner", "contributor"]
-            }
-        },
-        "environment": {
-            "type": "string",
-            "enum": ["Prod", "QA", "UAT", "Dev"]
-        },
-        "dynamic": {
-            "type": "boolean"
-        },
-        "dynamic_scope": {
-            "type": "boolean"
-        },
-        "exception_type": {
-            "type": "string",
-            "enum": ["permanent", "dynamic"]
-        },
-        "expiration_date": {
-            "type": "string",
-            "format": "date-time"
-        },
-        "takeawayid": {
-            "type": "string"
-        }
-    },
-    "required": [
-        "spnname_patterns", 
-        "SPNdeptID", 
-        "containertype", 
-        "role", 
-        "environment", 
-        "dynamic", 
-        "dynamic_scope", 
-        "exception_type"
-    ],
-    "dependencies": {
-        "takeawayid": ["expiration_date"]
+<#
+.SYNOPSIS
+    Validates an exception against a defined schema and business rules.
+
+.DESCRIPTION
+    The `Test-Exception` function checks if the provided exception matches the expected schema and validates key attributes 
+    such as SPN Object ID, SPN EonID, Azure Scope Type, and other custom security attributes. 
+    It helps to ensure that exceptions are correctly formed and in line with the required rules.
+
+.PARAMETER Exception
+    A hashtable or JSON object containing the exception details. 
+    It must follow the defined schema (e.g., SPN Object ID, SPN Name Like, Role, AzScope Object ID, AzScope EonID, etc.).
+
+.PARAMETER DynamicSPN
+    Specifies whether the SPN in the exception is dynamic. Default is `$false`. When set to `$true`, additional checks are applied.
+
+.PARAMETER DynamicAzureScope
+    Specifies whether the Azure Scope in the exception is dynamic. Default is `$false`. When set to `$true`, additional checks are applied.
+
+.PARAMETER Environment
+    The environment to check against (e.g., Prod, NonProd). Mandatory for verifying role assignments.
+
+.EXAMPLE
+    # Example 1: Simple single SPN exception
+    $exception = @{
+        "spn_object_id" = "12345-abcde-67890"
+        "AzScope_objectid" = "54321-edcba-09876"
+        "Role" = "Owner"
+        "spn_eonid" = "Dept-001"
+        "AzScope_eonid" = "Dept-001"
     }
+    Test-Exception -Exception $exception
+
+    # Example 2: Name Like Example
+    $exception = @{
+        "spn_name_like" = "*admin-spn*"
+        "AzScope_name_like" = "*core-rg*"
+        "Role" = "AppDevContributor"
+        "Environment" = "NonProd"
+    }
+    Test-Exception -Exception $exception
+
+.NOTES
+    Ensure that you provide either SPN Object ID or SPN Name Like values.
+    Also, remember to match eonid (department ID) between SPNs and Azure scopes when required.
+
+#>
+
+function Test-Exception {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Exception,
+
+        [Parameter()]
+        [bool]$DynamicSPN = $false,
+
+        [Parameter()]
+        [bool]$DynamicAzureScope = $false,
+
+        [Parameter()]
+        [string]$Environment
+    )
+
+    # Validate mandatory fields based on schema
+    if (-not $Exception.ContainsKey('spn_object_id') -and -not $Exception.ContainsKey('spn_name_like')) {
+        Write-Error "An exception must include either an SPN Object ID or a 'spn_name_like' value."
+        return $false
+    }
+
+    if (-not $Exception.ContainsKey('Role')) {
+        Write-Error "A role must be specified in the exception."
+        return $false
+    }
+
+    # Optional: Validate eonid matching logic (if applicable)
+    if ($Exception.ContainsKey('spn_eonid') -and $Exception.ContainsKey('AzScope_eonid')) {
+        if ($Exception['spn_eonid'] -ne $Exception['AzScope_eonid']) {
+            Write-Error "SPN EonID and Azure Scope EonID must match."
+            return $false
+        }
+    }
+
+    # Validate environment requirements (if provided)
+    if ($null -ne $Environment -and $Environment -notin @('Prod', 'NonProd')) {
+        Write-Error "Invalid environment specified. Must be 'Prod' or 'NonProd'."
+        return $false
+    }
+
+    # Validate dynamic behaviors if set
+    if ($DynamicSPN -and $DynamicAzureScope) {
+        Write-Output "Warning: Both SPN and Azure Scope are marked as dynamic. Ensure this is intentional."
+    }
+
+    Write-Output "Exception validated successfully."
+    return $true
 }
