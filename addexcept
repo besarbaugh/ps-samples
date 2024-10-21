@@ -1,1 +1,222 @@
+<#
+.SYNOPSIS
+    Adds a new exception to the exception list based on the defined schema.
+
+.DESCRIPTION
+    This function creates a new exception object and adds it to the exception list. It validates key parameters based on 
+    the defined schema and enforces rules like mandatory fields, conditional EonID checks, and either ActionPlan or SecArch.
+
+.PARAMETER SPNObjectID
+    The Object ID of the Service Principal (SPN). Either this or SPNNameLike is required.
+
+.PARAMETER SPNNameLike
+    A pattern for SPN name matching. Either this or SPNObjectID is required.
+
+.PARAMETER Role
+    The role to assign to the SPN within the specified scope.
+
+.PARAMETER AzScopeObjectID
+    The Object ID of the Azure Scope (Resource Group, Subscription, or Management Group). Either this or AzScopeNameLike is required.
+
+.PARAMETER AzScopeNameLike
+    A pattern for Azure Scope name matching. Either this or AzScopeObjectID is required.
+
+.PARAMETER AzureScopeType
+    The type of Azure Scope (RG, Sub, MG). This helps determine if EonID matching is relevant.
+
+.PARAMETER SPNEonID
+    The EonID (or department ID) associated with the SPN. Optional if the container type is not Resource Group.
+
+.PARAMETER AzScopeEonID
+    The EonID (or department ID) associated with the Azure Scope. Optional if the container type is not Resource Group.
+
+.PARAMETER ActionPlan
+    A hashtable that contains fields like ID, DateAdded, and ExpirationDate. Optional if SecArch is provided.
+
+.PARAMETER SecArch
+    A hashtable that contains fields like ID and DateAdded. Optional if ActionPlan is provided.
+
+.EXAMPLE
+    # Example 1: Add an exception with SPN and Azure Scope Object IDs for a Resource Group
+    Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" -AzScopeObjectID "54321-edcba-09876" `
+        -AzureScopeType "RG" -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
+        -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" }
+
+    # Example 2: Add an exception using name-like patterns for a Management Group with SecArch
+    Add-Exception -SPNNameLike "*admin-spn*" -Role "AppDevContributor" `
+        -AzScopeNameLike "*core-mg*" -AzureScopeType "MG" `
+        -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" }
+
+.NOTES
+    This function supports adding flexible exceptions based on Object IDs or name-like patterns. 
+    It also accommodates dynamic behaviors based on different types of Azure containers.
+#>
+
+function Add-Exception {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $false)]
+        [string]$SPNObjectID,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SPNNameLike,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Role,
+
+        [Parameter(Mandatory = $false)]
+        [string]$AzScopeObjectID,
+
+        [Parameter(Mandatory = $false)]
+        [string]$AzScopeNameLike,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("RG", "Sub", "MG")]
+        [string]$AzureScopeType,
+
+        [Parameter(Mandatory = $false)]
+        [string]$SPNEonID,
+
+        [Parameter(Mandatory = $false)]
+        [string]$AzScopeEonID,
+
+        [Parameter(Mandatory = $false)]
+        [hashtable]$ActionPlan,
+
+        [Parameter(Mandatory = $false)]
+        [hashtable]$SecArch
+    )
+
+    # Validate SPN identifiers
+    if (-not $SPNObjectID -and -not $SPNNameLike) {
+        Write-Error "You must specify either SPNObjectID or SPNNameLike."
+        return
+    }
+
+    # Validate Azure Scope identifiers
+    if (-not $AzScopeObjectID -and -not $AzScopeNameLike) {
+        Write-Error "You must specify either AzScopeObjectID or AzScopeNameLike."
+        return
+    }
+
+    # Validate EonID presence if required for Resource Groups
+    if ($AzureScopeType -eq "RG" -and $SPNEonID -and $AzScopeEonID) {
+        if ($SPNEonID -ne $AzScopeEonID) {
+            Write-Error "SPN EonID and Azure Scope EonID must match for Resource Groups when both are provided."
+            return
+        }
+    }
+
+    # Validate that either ActionPlan or SecArch is provided
+    if (-not $ActionPlan -and -not $SecArch) {
+        Write-Error "You must specify either ActionPlan or SecArch."
+        return
+    }
+
+    # Validate ActionPlan if provided
+    if ($ActionPlan) {
+        if (-not $ActionPlan.ContainsKey("ID") -or -not $ActionPlan.ContainsKey("DateAdded") -or -not $ActionPlan.ContainsKey("ExpirationDate")) {
+            Write-Error "ActionPlan must include ID, DateAdded, and ExpirationDate."
+            return
+        }
+    }
+
+    # Validate SecArch if provided
+    if ($SecArch) {
+        if (-not $SecArch.ContainsKey("ID") -or -not $SecArch.ContainsKey("DateAdded")) {
+            Write-Error "SecArch must include ID and DateAdded."
+            return
+        }
+    }
+
+    # Create and add the exception (this is a placeholder for the actual logic to add it to your data store)
+    $exception = @{
+        "SPNObjectID" = $SPNObjectID
+        "SPNNameLike" = $SPNNameLike
+        "Role" = $Role
+        "AzScopeObjectID" = $AzScopeObjectID
+        "AzScopeNameLike" = $AzScopeNameLike
+        "AzureScopeType" = $AzureScopeType
+        "SPNEonID" = $SPNEonID
+        "AzScopeEonID" = $AzScopeEonID
+        "ActionPlan" = $ActionPlan
+        "SecArch" = $SecArch
+    }
+
+    # Output the created exception (for now)
+    Write-Output $exception
+}
+
+
+##
+
+# Unit test script using Pester
+Describe 'Add-Exception' {
+    It 'Should successfully add an exception with valid inputs for RG' {
+        $result = Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -SPNEonID "Dept-001" -AzScopeEonID "Dept-001" `
+            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" }
+        $result | Should -Not -BeNullOrEmpty
+        $result.SPNEonID | Should -Be "Dept-001"
+        $result.AzScopeObjectID | Should -Be "54321-edcba-09876"
+    }
+
+    It 'Should successfully add an exception using name-like patterns for MG with SecArch' {
+        $result = Add-Exception -SPNNameLike "*admin-spn*" -Role "AppDevContributor" `
+            -AzScopeNameLike "*core-mg*" -AzureScopeType "MG" `
+            -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" }
+        $result | Should -Not -BeNullOrEmpty
+        $result.AzureScopeType | Should -Be "MG"
+        $result.SecArch.ID | Should -Be "Sec-123"
+    }
+
+    It 'Should fail if neither ActionPlan nor SecArch is provided' {
+        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "Sub" }
+        $result | Should -Throw
+    }
+
+    It 'Should fail if EonID fields do not match for RG when both are provided' {
+        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -SPNEonID "Dept-001" -AzScopeEonID "Dept-002" `
+            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } }
+        $result | Should -Throw
+    }
+
+    It 'Should successfully add an exception without EonID for MG' {
+        $result = Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "MG" `
+            -SecArch @{ ID = "Sec-123"; DateAdded = "2024-10-21" }
+        $result | Should -Not -BeNullOrEmpty
+        $result.AzureScopeType | Should -Be "MG"
+    }
+
+    It 'Should fail if neither SPNObjectID nor SPNNameLike is provided' {
+        $result = { Add-Exception -Role "Owner" -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } }
+        $result | Should -Throw
+    }
+
+    It 'Should fail if neither AzScopeObjectID nor AzScopeNameLike is provided' {
+        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzureScopeType "RG" -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21"; ExpirationDate = "2025-10-21" } }
+        $result | Should -Throw
+    }
+
+    It 'Should fail if mandatory ActionPlan fields are missing' {
+        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -ActionPlan @{ ID = "T123"; DateAdded = "2024-10-21" } }
+        $result | Should -Throw
+    }
+
+    It 'Should fail if mandatory SecArch fields are missing' {
+        $result = { Add-Exception -SPNObjectID "12345-abcde-67890" -Role "Owner" `
+            -AzScopeObjectID "54321-edcba-09876" -AzureScopeType "RG" `
+            -SecArch @{ ID = "Sec-123" } }
+        $result | Should -Throw
+    }
+}
 
