@@ -1,0 +1,10 @@
+{
+	"project-name": {
+		"Tests": {
+			"ExceptionManager.tests.ps1": ""
+		},
+		"pesterConfig.json": {
+			"description": "This file is the configuration file for Pester. You can customize the behavior of Pester by modifying this file."
+		}
+	}
+}
