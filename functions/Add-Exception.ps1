@@ -32,7 +32,7 @@
     The EonID for the SPN, required for spn_name_like patterns.
 
 .PARAMETER tenant
-    The tenant identifier (1, 2, 3). Translates to "Prod", "QA", or "Dev" in the exceptions.json file.
+    The tenant identifier. Accepted values: "TENANT_A", "TENANT_B", "TENANT_C". Translated to those tenant names in the exceptions.json file.
 
 .PARAMETER SecArch
     The SecArch approval identifier. Automatically has a 'date added'. Mutually exclusive with ActionPlan.
@@ -51,6 +51,9 @@
 
 .PARAMETER datasetPath
     The file path for the dataset (CSV). Defaults to the path specified in config.json.
+
+.PARAMETER removalCount
+    Optional switch to output the count of how many items would be removed from the dataset based on this new exception.
 #>
 
 function Add-Exception {
@@ -62,13 +65,14 @@ function Add-Exception {
         [Parameter(Mandatory=$false)][string]$azObjectScopeID,  # Used for specific object scope
         [Parameter(Mandatory=$false)][string]$azObjectNameLike,  # Used for name-like objects
         [Parameter(Mandatory=$false)][string]$spnEonid,  # Required for name-like SPNs
-        [Parameter(Mandatory=$false)][ValidateSet('1', '2', '3')][string]$tenant,  # Tenant validation, translated to Prod, QA, Dev
+        [Parameter(Mandatory=$false)][ValidateSet('TENANT_A', 'TENANT_B', 'TENANT_C')][string]$tenant,  # Tenant validation
         [Parameter(Mandatory=$false)][string]$SecArch,  # Mutually exclusive with ActionPlan
         [Parameter(Mandatory=$false)][string]$ActionPlan,  # Mutually exclusive with SecArch
         [Parameter(Mandatory=$false)][datetime]$expiration_date,  # Required for ActionPlan
         [Parameter(Mandatory=$false)][string]$OverPrivExceptionCSA,  # Placeholder for future CSA-based parameter
         [Parameter(Mandatory=$false)][string]$exceptionsPath,  # File path for exceptions.json
-        [Parameter(Mandatory=$false)][string]$datasetPath  # Dataset path (optional, default to config.json)
+        [Parameter(Mandatory=$false)][string]$datasetPath,  # Dataset path (optional, default to config.json)
+        [switch]$removalCount  # Optional switch to output removal count
     )
 
     # Load configuration settings from config.json
@@ -83,8 +87,8 @@ function Add-Exception {
         $exceptionsPath = $config.exceptionsPath
     }
     if (-not $datasetPath) {
-        # Load dataset using the new Load-Dataset function
-        $dataset = Load-Dataset -datasetDir $config.datasetDir -filenamePattern $config.filenamePattern
+        # Load dataset using the Get-Dataset function
+        $dataset = Get-Dataset -datasetDir $config.datasetDir -filenamePattern $config.filenamePattern
     } else {
         # Load dataset from a user-specified path
         $dataset = Import-Csv -Path $datasetPath
@@ -103,20 +107,13 @@ function Add-Exception {
         throw "Cannot use both azObjectScopeID and azObjectNameLike."
     }
 
-    # If using spnNameLike, ensure tenant and spnEonid are provided, and translate tenant to Prod, QA, or Dev
+    # If using spnNameLike, ensure tenant and spnEonid are provided
     if ($spnNameLike) {
         if (-not $tenant) {
             throw "Tenant is required when using spnNameLike."
         }
         if (-not $spnEonid) {
             throw "spnEonid is required when using spnNameLike."
-        }
-
-        # Translate tenant values to Prod, QA, Dev
-        switch ($tenant) {
-            '1' { $tenant = 'Prod' }
-            '2' { $tenant = 'QA' }
-            '3' { $tenant = 'Dev' }
         }
 
         # If CSA is enforced, validate spnEonid and spnEnv against $dataset instead of display names
@@ -166,7 +163,7 @@ function Add-Exception {
     } elseif ($spnNameLike) {
         $exception.spn_name_like = $spnNameLike
         $exception.spn_eonid = $spnEonid
-        $exception.tenant = $tenant  # Store translated tenant (Prod, QA, Dev)
+        $exception.tenant = $tenant  # Store translated tenant (TENANT_A, TENANT_B, TENANT_C)
     }
 
     # Add azObject scope or name-like pattern
@@ -190,4 +187,31 @@ function Add-Exception {
 
     # Write the updated exceptions back to the file
     $exceptions | ConvertTo-Json | Set-Content -Path $exceptionsPath
+
+    # If removalCount is enabled, calculate how many items would be removed
+    if ($removalCount) {
+        $removalMatches = 0
+
+        foreach ($entry in $dataset) {
+            $isException = $false
+
+            foreach ($exception in $exceptions) {
+                # Check if the entry matches the new exception logic (spnObjectID, spn_name_like, azObjectScopeID, etc.)
+                if (($entry.AppObjectID -eq $exception.spn_object_id) -or
+                    ($entry.AppDisplayName -like $exception.spn_name_like) -or
+                    ($entry.AzureObjectScopeID -eq $exception.azObjectScopeID) -or
+                    ($entry.ObjectName -like $exception.azObjectNameLike)) {
+                    $isException = $true
+                    break
+                }
+            }
+
+            if ($isException) {
+                $removalMatches++
+            }
+        }
+
+        # Output the count of matched entries that would be removed
+        Write-Host "Removal count: $removalMatches"
+    }
 }
