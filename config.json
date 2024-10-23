@@ -1,4 +1,6 @@
 {
-    "csa_enforced": false,
-    "jsonFilePath": "./exceptions.json"
+    "exceptionsPath": ".\\exceptions.json",
+    "datasetDir": "\\networkshare\\datasets",
+    "filenamePattern": "filename_",
+    "csaEnforced": false
 }
