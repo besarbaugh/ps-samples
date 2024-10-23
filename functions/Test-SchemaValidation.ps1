@@ -20,87 +20,70 @@
     $true if the schema is valid, throws an error otherwise.
 #>
 
-function Test-SchemaValidation {
+function Remove-Exceptions {
     param(
-        [Parameter(Mandatory=$true)][hashtable]$exception,
-        [Parameter(Mandatory=$false)][string]$datasetPath  # Optional, default from config.json
+        [Parameter(Mandatory = $true)][array]$data,  # Dataset loaded as array of objects
+        [Parameter(Mandatory = $true)][string]$exceptionsJsonPath,  # Path to exceptions.json
+        [Parameter(Mandatory = $false)][switch]$removalCount  # Optional: Count removed entries
     )
 
-    # Load configuration settings from config.json
-    $configPath = ".\config.json"
-    if (-not (Test-Path -Path $configPath)) {
-        throw "config.json not found. Please ensure the configuration file is present."
-    }
-    $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
-
-    # Load dataset
-    if (-not $datasetPath) {
-        # Load dataset using the Load-Dataset function
-        $dataset = Load-Dataset -datasetDir $config.datasetDir -filenamePattern $config.filenamePattern
-    } else {
-        # Load dataset from a user-specified path
-        $dataset = Import-Csv -Path $datasetPath
-    }
-
-    # Check if CSA is enforced
-    $csaEnforced = $config.csaEnforced
-
-    # Validate mandatory keys for spnObjectID or spn_name_like
-    if (-not $exception.ContainsKey("spn_object_id") -and -not $exception.ContainsKey("spn_name_like")) {
-        throw "Either spn_object_id or spn_name_like is required."
-    }
-
-    # Ensure spn_name_like and spn_object_id are not used together
-    if ($exception.ContainsKey("spn_object_id") -and $exception.ContainsKey("spn_name_like")) {
-        throw "Cannot use both spn_object_id and spn_name_like in the same exception."
-    }
-
-    # Validate PrivRole is present
-    if (-not $exception.ContainsKey("PrivRole") -or [string]::IsNullOrWhiteSpace($exception.PrivRole)) {
-        throw "PrivRole is required."
-    }
-
-    # Validate az_scope_type is present
-    if (-not $exception.ContainsKey("az_scope_type")) {
-        throw "az_scope_type is required."
-    }
-
-    # If spn_name_like is used, spnEonid and tenant must be present
-    if ($exception.ContainsKey("spn_name_like")) {
-        if (-not $exception.ContainsKey("spn_eonid")) {
-            throw "spnEonid is required when using spn_name_like."
-        }
-        if (-not $exception.ContainsKey("tenant")) {
-            throw "Tenant is required when using spn_name_like."
+    try {
+        if (-not (Test-Path -Path $exceptionsJsonPath)) {
+            throw "exceptions.json file not found at $exceptionsJsonPath"
         }
 
-        # If CSA is enforced, validate spnEonid and spnEnv against dataset
-        if ($csaEnforced -eq $true) {
-            if (-not ($dataset | Where-Object { $_.spnEonid -eq $exception.spn_eonid })) {
-                throw "Invalid spnEonid. The EonID does not match any CSA data in the dataset."
-            }
-            if ($exception.ContainsKey("spnEnv")) {
-                if (-not ($dataset | Where-Object { $_.spnEnv -eq $exception.spnEnv })) {
-                    throw "Invalid spnEnv. The Env does not match any CSA data in the dataset."
+        # Load exceptions from the JSON file
+        $exceptions = Get-Content -Path $exceptionsJsonPath | ConvertFrom-Json
+
+        if (-not $exceptions) {
+            throw "No exceptions found in $exceptionsJsonPath"
+        }
+
+        # Initialize a counter for removed entries if needed
+        $removedEntriesCount = 0
+
+        # Filter out entries that match any exception
+        $filteredResults = $data | Where-Object {
+            $isException = $false
+
+            foreach ($exception in $exceptions) {
+                if ($_.AppObjectID -eq $exception.spn_object_id -and
+                    $_.AppEonid -eq $exception.spn_eonid -and
+                    $_.Tenant -eq $exception.tenant) {
+                    $isException = $true
+                    break
+                }
+
+                if ($_.AppDisplayName -like "*$($exception.spn_name_like)*" -and
+                    $_.AppEonid -eq $exception.spn_eonid -and
+                    $_.Tenant -eq $exception.tenant) {
+                    $isException = $true
+                    break
+                }
+
+                if ($_.ObjectName -like "*$($exception.azObjectNameLike)*" -and
+                    $_.PrivRole -eq $exception.PrivRole) {
+                    $isException = $true
+                    break
                 }
             }
+
+            if ($isException) {
+                $removedEntriesCount++
+            }
+
+            return -not $isException
         }
-    }
 
-    # Ensure azObjectNameLike and azObjectID are not used together
-    if ($exception.ContainsKey("azObjectScopeID") -and $exception.ContainsKey("azObjectNameLike")) {
-        throw "Cannot use both azObjectScopeID and azObjectNameLike in the same exception."
-    }
+        # Output the removal count if requested
+        if ($removalCount.IsPresent) {
+            Write-Host "Removed entries count: $removedEntriesCount"
+        }
 
-    # Ensure that only SecArch or ActionPlan is provided
-    if ($exception.ContainsKey("SecArch") -and $exception.ContainsKey("ActionPlan")) {
-        throw "Cannot have both SecArch and ActionPlan."
+        return $filteredResults
     }
-
-    # Ensure ActionPlan has an expiration date
-    if ($exception.ContainsKey("ActionPlan") -and -not $exception.ContainsKey("expiration_date")) {
-        throw "ActionPlan requires an expiration date."
+    catch {
+        Write-Error "An error occurred in Remove-Exceptions: $_"
+        throw $_
     }
-    
-    return $true
 }

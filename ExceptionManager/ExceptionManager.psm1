@@ -1,20 +1,18 @@
-<#
-.SYNOPSIS
-    ExceptionManager Module - Handles loading, validating, and adding exceptions to exceptions.json with CSA support.
+# ExceptionManager.psm1
+# Author: Brian Sarbaugh
+# Version: 1.0.0
+# Description: PowerShell module for managing Azure exceptions with support for SPN and Azure object role validation, schema validation, 
+#              and CSA enforcement. The module includes functions for adding, removing, and validating exceptions.
+# Created: October 2024
 
-.DESCRIPTION
-    This module includes functions for loading datasets from network shares, validating exception schemas, and 
-    adding new exceptions to the system. It integrates support for Custom Security Attributes (CSA) and 
-    configurable dataset paths and file patterns via config.json.
-
-#>
-
-# Import required functions from the functions directory
+# Import individual functions
 . "$PSScriptRoot\functions\Get-Dataset.ps1"
 . "$PSScriptRoot\functions\Add-Exception.ps1"
 . "$PSScriptRoot\functions\Test-SchemaValidation.ps1"
 . "$PSScriptRoot\functions\Remove-Exceptions.ps1"
 
-# Export the core functions for use
+# Export module members
 Export-ModuleMember -Function Get-Dataset, Add-Exception, Test-SchemaValidation, Remove-Exceptions
 
+# Version History
+# Version 1.0.0 - Initial version of ExceptionManager
