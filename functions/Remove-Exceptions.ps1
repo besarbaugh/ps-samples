@@ -5,8 +5,7 @@
 .DESCRIPTION
     This function loads the dataset and exceptions.json and removes entries from the dataset that are 
     already covered by exceptions. It compares fields like spnObjectID, spnNameLike, azObjectScopeID, 
-    and azObjectNameLike to determine matches. Custom Security Attributes (CSA) will also be validated 
-    if enforced via config.json.
+    and azObjectNameLike to determine matches. Case sensitivity is ignored for all matches.
 
 .PARAMETER datasetPath
     The path to the dataset (CSV). Defaults to the path specified in config.json.
@@ -47,62 +46,71 @@ function Remove-Exceptions {
     }
     $exceptions = Get-Content -Raw -Path $exceptionsPath | ConvertFrom-Json
 
-    # Iterate through the dataset and filter out entries that match exceptions
-    $filteredDataset = foreach ($entry in $dataset) {
+    # Create an empty array to hold filtered results
+    $filteredResults = @()
+
+    # Loop through each item in the dataset
+    foreach ($item in $dataset) {
         $isException = $false
 
         foreach ($exception in $exceptions) {
-            # Check spnObjectID or spn_name_like
+            # Check spnObjectID (case-insensitive)
             if ($exception.spn_object_id) {
-                if ($entry.AppObjectID -eq $exception.spn_object_id) {
+                if ($item.AppObjectID -ieq $exception.spn_object_id) {
                     $isException = $true
-                    break
-                }
-            } elseif ($exception.spn_name_like) {
-                if ($entry.AppDisplayName -like $exception.spn_name_like) {
-                    $isException = $true
-                    break
+                    break  # Exit the loop if a match is found
                 }
             }
 
-            # Check azObjectScopeID or azObjectNameLike
+            # Check spnNameLike (case-insensitive wildcard match)
+            if ($exception.spn_name_like) {
+                if ($item.AppDisplayName -ilike $exception.spn_name_like) {
+                    $isException = $true
+                    break  # Exit the loop if a match is found
+                }
+            }
+
+            # Check azObjectScopeID (case-insensitive)
             if ($exception.azObjectScopeID) {
-                if ($entry.AzureObjectScopeID -eq $exception.azObjectScopeID) {
+                if ($item.AzureObjectScopeID -ieq $exception.azObjectScopeID) {
                     $isException = $true
-                    break
-                }
-            } elseif ($exception.azObjectNameLike) {
-                if ($entry.ObjectName -like $exception.azObjectNameLike) {
-                    $isException = $true
-                    break
+                    break  # Exit the loop if a match is found
                 }
             }
 
-            # Check spnEonid if required
+            # Check azObjectNameLike (case-insensitive wildcard match)
+            if ($exception.azObjectNameLike) {
+                if ($item.ObjectName -ilike $exception.azObjectNameLike) {
+                    $isException = $true
+                    break  # Exit the loop if a match is found
+                }
+            }
+
+            # Check spnEonid if present (case-insensitive)
             if ($exception.spn_eonid) {
-                if ($entry.AppEonid -ne $exception.spn_eonid) {
-                    $isException = $false  # No match, reset flag
+                if ($item.AppEonid -ine $exception.spn_eonid) {
+                    $isException = $false  # Reset flag if spnEonid doesn't match
                     continue
                 }
             }
 
-            # Check tenant if required
+            # Check tenant if present (case-insensitive)
             if ($exception.tenant) {
-                if ($entry.Tenant -ne $exception.tenant) {
-                    $isException = $false  # No match, reset flag
+                if ($item.Tenant -ine $exception.tenant) {
+                    $isException = $false  # Reset flag if tenant doesn't match
                     continue
                 }
             }
         }
 
-        # If it's not an exception, include it in the filtered dataset
+        # Add item to results if not an exception
         if (-not $isException) {
-            $entry
+            $filteredResults += $item
         }
     }
 
     # Return the filtered dataset (entries without matching exceptions)
-    return $filteredDataset
+    return $filteredResults
 }
 
 # Example usage
