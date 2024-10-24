@@ -71,43 +71,54 @@ function Filter-Exceptions {
             throw "You must provide either a dataset object or a dataset CSV file path."
         }
 
-        # Iterate over exceptions and apply filtering logic to remove matching records
-        foreach ($exception in $exceptions) {
-            $dataset = $dataset | Where-Object {
+        # Iterate over the dataset and filter out matching entries based on the exceptions
+        $filteredDataset = foreach ($entry in $dataset) {
+            $isExcluded = $false
+
+            # Loop through each exception and check if the current dataset entry matches
+            foreach ($exception in $exceptions) {
                 $spnMatch = $false
                 $azObjectMatch = $false
 
                 # Handle SPN matching logic
                 if ($exception.spnObjectID) {
-                    $spnMatch = ($_.AppObjectID -ieq $exception.spnObjectID)
+                    $spnMatch = ($entry.AppObjectID -ieq $exception.spnObjectID)
                 } elseif ($exception.spnNameLike) {
-                    $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+                    $spnMatch = ($entry.AppDisplayName -ilike "*$($exception.spnNameLike)*")
                 }
 
                 # Handle Azure object matching logic
                 if ($exception.azObjectScopeID) {
-                    $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+                    $azObjectMatch = ($entry.AzureObjectScopeID -eq $exception.azObjectScopeID)
                 } elseif ($exception.azObjectNameLike) {
-                    $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+                    $azObjectMatch = ($entry.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # Ensure that all matches align for removal
-                -not (
+                # Ensure that all matches align for exclusion
+                if (
                     $spnMatch -and $azObjectMatch -and
-                    ($_.PrivRole -ieq $exception.role) -and
-                    ($_.ObjectType -ieq $exception.azScopeType) -and
-                    ($_.Tenant -ieq $exception.tenant) -and
+                    ($entry.PrivRole -ieq $exception.role) -and
+                    ($entry.ObjectType -ieq $exception.azScopeType) -and
+                    ($entry.Tenant -ieq $exception.tenant) -and
                     (-not $exception.expiration_date -or [datetime]$exception.expiration_date -gt (Get-Date))
-                )
+                ) {
+                    $isExcluded = $true
+                    break  # If one exception matches, skip the entry
+                }
+            }
+
+            # Only keep the entry if no exception matched
+            if (-not $isExcluded) {
+                $entry
             }
         }
 
         # Output filtered dataset
         if ($outputCsvPath) {
-            $dataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
+            $filteredDataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
             Write-Host "Filtered dataset written to: $outputCsvPath"
         } else {
-            return $dataset
+            return $filteredDataset
         }
     }
     catch {
