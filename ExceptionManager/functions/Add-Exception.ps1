@@ -187,39 +187,39 @@ function Add-Exception {
         $exceptions += $exception
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
-        # RemovalCount logic
 if ($removalCount) {
     $removalMatches = $dataset | Where-Object {
+        # Initialize boolean for spn and azure object checks
+        $spnMatch = $false
+        $azObjectMatch = $false
+
         # Handle spnObjectID vs spnNameLike logic
         if ($exception.spnObjectID) {
             # If using spnObjectID, ignore spnNameLike filtering
-            ($_.AppObjectID -eq $exception.spnObjectID)
+            $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
         } elseif ($exception.spnNameLike) {
             # If using spnNameLike, ignore spnObjectID filtering
-            ($_.AppDisplayName -icontains "$exception.spnNameLike")
-        } else {
-            # Default case: don't match anything if neither are present
-            $false
+            $spnMatch = ($_.AppDisplayName -icontains "$exception.spnNameLike")
         }
 
         # Handle azObjectScopeID vs azObjectNameLike logic
         if ($exception.azObjectScopeID) {
             # If using azObjectScopeID, ignore azObjectNameLike filtering
-            ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+            $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
         } elseif ($exception.azObjectNameLike) {
             # If using azObjectNameLike, ignore azObjectScopeID filtering
-            ($_.ObjectName -icontains "$exception.azObjectNameLike")
-        } else {
-            # Default case: don't match anything if neither are present
-            $false
+            $azObjectMatch = ($_.ObjectName -icontains "$exception.azObjectNameLike")
         }
 
-        # Always match on role, azScopeType, and tenant
+        # Check that both spnMatch and azObjectMatch are true, and role, azScopeType, and tenant also match
+        $spnMatch -and $azObjectMatch -and
         ($_.PrivRole -eq $exception.role) -and
         ($_.ObjectType -eq $exception.azScopeType) -and
         ($_.Tenant -ieq $exception.tenant)
     }
     Write-Host "Removal count: $($removalMatches.Count)"
+}
+
 }
 
 }
