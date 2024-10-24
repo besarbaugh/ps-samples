@@ -190,19 +190,38 @@ function Add-Exception {
         # RemovalCount logic
 if ($removalCount) {
     $removalMatches = $dataset | Where-Object {
-        (
-            ($_.AppObjectID -eq $exception.spnObjectID) -or
-            ($_.AppDisplayName -like "*$($exception.spnNameLike)*")  # Use -like for wildcards
-        ) -and
-        (
-            ($_.AzureObjectScopeID -eq $exception.azObjectScopeID) -or
-            ($_.ObjectName -like "*$($exception.azObjectNameLike)*")  # Use -like for wildcards
-        ) -and
+        # Handle spnObjectID vs spnNameLike logic
+        if ($exception.spnObjectID) {
+            # If using spnObjectID, ignore spnNameLike filtering
+            ($_.AppObjectID -eq $exception.spnObjectID)
+        } elseif ($exception.spnNameLike) {
+            # If using spnNameLike, ignore spnObjectID filtering
+            ($_.AppDisplayName -icontains "$exception.spnNameLike")
+        } else {
+            # Default case: don't match anything if neither are present
+            $false
+        }
+
+        # Handle azObjectScopeID vs azObjectNameLike logic
+        if ($exception.azObjectScopeID) {
+            # If using azObjectScopeID, ignore azObjectNameLike filtering
+            ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+        } elseif ($exception.azObjectNameLike) {
+            # If using azObjectNameLike, ignore azObjectScopeID filtering
+            ($_.ObjectName -icontains "$exception.azObjectNameLike")
+        } else {
+            # Default case: don't match anything if neither are present
+            $false
+        }
+
+        # Always match on role, azScopeType, and tenant
         ($_.PrivRole -eq $exception.role) -and
         ($_.ObjectType -eq $exception.azScopeType) -and
         ($_.Tenant -ieq $exception.tenant)
     }
     Write-Host "Removal count: $($removalMatches.Count)"
+}
+
 }
     }
     catch {
