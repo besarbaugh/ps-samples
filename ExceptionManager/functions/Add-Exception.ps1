@@ -188,16 +188,22 @@ function Add-Exception {
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
         # RemovalCount logic
-        if ($removalCount) {
-            $removalMatches = $dataset | Where-Object {
-                ($_.AppObjectID -eq $exception.spnObjectID -or $_.AppDisplayName -icontains "$exception.spnNameLike") -and
-                ($_.AzureObjectScopeID -eq $exception.azObjectScopeID -or $_.ObjectName -icontains "$exception.azObjectNameLike") -and
-                ($_.PrivRole -eq $exception.role) -and
-                ($_.ObjectType -eq $exception.azScopeType) -and
-                ($_.Tenant -ieq $exception.tenant)
-            }
-            Write-Host "Removal count: $($removalMatches.Count)"
-        }
+      if ($removalCount) {
+    $removalMatches = $dataset | Where-Object {
+        (
+            ($_.AppObjectID -eq $exception.spnObjectID) -or
+            ($_.AppDisplayName -icontains "$exception.spnNameLike")
+        ) -and
+        (
+            ($_.AzureObjectScopeID -eq $exception.azObjectScopeID) -or
+            ($_.ObjectName -icontains "$exception.azObjectNameLike")
+        ) -and
+        ($_.PrivRole -eq $exception.role) -and
+        ($_.ObjectType -eq $exception.azScopeType) -and
+        ($_.Tenant -ieq $exception.tenant)
+    }
+    Write-Host "Removal count: $($removalMatches.Count)"
+}
     }
     catch {
         Write-Error "An error occurred: $_"
