@@ -1,128 +1,112 @@
 <#
 .SYNOPSIS
-    Filters the dataset by applying exceptions from the exceptions.json file.
+    Filters exceptions from a dataset by removing line items based on the exceptions.json file.
 
 .DESCRIPTION
-    This function reads exceptions from the exceptions.json file and applies them to filter out matching records 
-    from the provided dataset. It supports both object ID-based and name-like pattern filtering for SPNs and Azure objects.
-    It removes matching records from the dataset based on the filtering rules.
-
-.PARAMETER datasetObject
-    Optional parameter. A PowerShell object (array of objects) representing the dataset to be filtered.
-
-.PARAMETER datasetPath
-    The file path for the dataset (CSV) if not passed as a PowerShell object.
+    This function filters a dataset by removing entries that match the criteria specified in the exceptions.json file. 
+    It handles both SPN object ID-based exceptions and SPN name-like patterns, with mutual exclusivity. It also supports 
+    filtering by Azure object scope or name-like patterns, and by role, scope type, and tenant. Expired ActionPlan exceptions are ignored.
 
 .PARAMETER exceptionsPath
     The file path for the exceptions.json file. Defaults to the path specified in config.json.
 
-.PARAMETER outputCsvPath
-    The file path where the filtered dataset will be written (optional).
+.PARAMETER datasetPath
+    The file path for the dataset (CSV). Defaults to the path specified in config.json.
 
-.RETURNS
-    The filtered dataset as a PowerShell object, or writes the filtered dataset to CSV if outputCsvPath is specified.
+.PARAMETER outputPath
+    The file path to save the filtered dataset after removing exceptions.
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.0.3
+    Version: 1.0.0
+    This function filters out dataset entries that match exceptions in exceptions.json.
+
+.EXAMPLE
+    Filter-Exceptions -datasetPath "dataset.csv" -outputPath "filtered_dataset.csv"
+    
+    Filters out exceptions from the dataset and saves the filtered dataset to a new file.
 #>
 
 function Filter-Exceptions {
     param(
-        [Parameter(Mandatory = $false)][array]$datasetObject,  # Accepts dataset as an object array
-        [Parameter(Mandatory = $false)][string]$datasetPath,  # Optional CSV dataset path
-        [Parameter(Mandatory = $false)][string]$exceptionsPath,  # Optional exceptions.json path (default from config.json)
-        [Parameter(Mandatory = $false)][string]$outputCsvPath  # Optional output CSV path
+        [Parameter(Mandatory = $false)][string]$exceptionsPath,  # Path to exceptions.json
+        [Parameter(Mandatory = $false)][string]$datasetPath,  # Path to the dataset CSV
+        [Parameter(Mandatory = $true)][string]$outputPath  # Path to save the filtered dataset
     )
 
     try {
-        # Load configuration settings from config.json
+        # Load configuration settings
         $configPath = ".\config.json"
         if (-not (Test-Path -Path $configPath)) {
-            throw "config.json not found. Please ensure the configuration file is present."
+            throw "config.json not found."
         }
-
         $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
 
-        # Set exceptionsPath from config.json if not provided
         if (-not $exceptionsPath) {
             $exceptionsPath = $config.exceptionsPath
         }
+        if (-not $datasetPath) {
+            $datasetPath = $config.datasetPath
+        }
 
+        # Load dataset and exceptions
+        $dataset = Import-Csv -Path $datasetPath
         if (-not (Test-Path -Path $exceptionsPath)) {
-            throw "exceptions.json file not found at: $exceptionsPath"
+            throw "exceptions.json not found at $exceptionsPath"
         }
-
-        # Load the exceptions
         $exceptions = Get-Content -Raw -Path $exceptionsPath | ConvertFrom-Json
-        if (-not $exceptions) {
-            throw "No exceptions found in $exceptionsPath"
-        }
 
-        # Load the dataset (either from object or CSV)
-        if ($datasetObject) {
-            $dataset = $datasetObject
-        } elseif ($datasetPath) {
-            if (-not (Test-Path -Path $datasetPath)) {
-                throw "Dataset file not found at: $datasetPath"
+        # Loop through each exception and remove matching entries from the dataset
+        foreach ($exception in $exceptions) {
+            if ($exception.ActionPlan -and ($exception.expiration_date -lt (Get-Date))) {
+                # Skip expired ActionPlan exceptions
+                continue
             }
-            $dataset = Import-Csv -Path $datasetPath
-        } else {
-            throw "You must provide either a dataset object or a dataset CSV file path."
-        }
 
-        # Iterate over the dataset and filter out matching entries based on the exceptions
-        $filteredDataset = foreach ($entry in $dataset) {
-            $isExcluded = $false
-
-            # Loop through each exception and check if the current dataset entry matches
-            foreach ($exception in $exceptions) {
+            # Remove matching entries from the dataset
+            $dataset = $dataset | Where-Object {
                 $spnMatch = $false
                 $azObjectMatch = $false
 
-                # Handle SPN matching logic
+                # Handle spnObjectID vs spnNameLike logic
                 if ($exception.spnObjectID) {
-                    $spnMatch = ($entry.AppObjectID -ieq $exception.spnObjectID)
+                    # If spnObjectID is provided, match it
+                    $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
                 } elseif ($exception.spnNameLike) {
-                    $spnMatch = ($entry.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+                    # If spnNameLike is provided, match using wildcard
+                    $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+                } else {
+                    # Apply to all if no SPN criteria are provided
+                    $spnMatch = $true
                 }
 
-                # Handle Azure object matching logic
+                # Handle azObjectScopeID vs azObjectNameLike logic
                 if ($exception.azObjectScopeID) {
-                    $azObjectMatch = ($entry.AzureObjectScopeID -eq $exception.azObjectScopeID)
+                    # If azObjectScopeID is provided, match it
+                    $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
                 } elseif ($exception.azObjectNameLike) {
-                    $azObjectMatch = ($entry.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+                    # If azObjectNameLike is provided, match using wildcard
+                    $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+                } else {
+                    # Apply to all if no Azure object criteria are provided
+                    $azObjectMatch = $true
                 }
 
-                # Ensure that all matches align for exclusion
-                if (
-                    $spnMatch -and $azObjectMatch -and
-                    ($entry.PrivRole -ieq $exception.role) -and
-                    ($entry.ObjectType -ieq $exception.azScopeType) -and
-                    ($entry.Tenant -ieq $exception.tenant) -and
-                    (-not $exception.expiration_date -or [datetime]$exception.expiration_date -gt (Get-Date))
-                ) {
-                    $isExcluded = $true
-                    break  # If one exception matches, skip the entry
-                }
-            }
-
-            # Only keep the entry if no exception matched
-            if (-not $isExcluded) {
-                $entry
+                # Exclude entries that match all criteria (SPN, Azure object, role, scope type, tenant)
+                -not ($spnMatch -and $azObjectMatch -and
+                ($_.PrivRole -eq $exception.role) -and
+                ($_.ObjectType -eq $exception.azScopeType) -and
+                ($_.Tenant -eq $exception.tenant))
             }
         }
 
-        # Output filtered dataset
-        if ($outputCsvPath) {
-            $filteredDataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
-            Write-Host "Filtered dataset written to: $outputCsvPath"
-        } else {
-            return $filteredDataset
-        }
+        # Save the filtered dataset
+        $dataset | Export-Csv -Path $outputPath -NoTypeInformation
+        Write-Host "Filtered dataset saved to $outputPath"
+
     }
     catch {
-        Write-Error "An error occurred in Filter-Exceptions: $_"
+        Write-Error "An error occurred: $_"
         throw $_
     }
 }
