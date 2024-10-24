@@ -188,15 +188,15 @@ function Add-Exception {
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
         # RemovalCount logic
-      if ($removalCount) {
+if ($removalCount) {
     $removalMatches = $dataset | Where-Object {
         (
             ($_.AppObjectID -eq $exception.spnObjectID) -or
-            ($_.AppDisplayName -icontains "$exception.spnNameLike")
+            ($_.AppDisplayName -like "*$($exception.spnNameLike)*")  # Use -like for wildcards
         ) -and
         (
             ($_.AzureObjectScopeID -eq $exception.azObjectScopeID) -or
-            ($_.ObjectName -icontains "$exception.azObjectNameLike")
+            ($_.ObjectName -like "*$($exception.azObjectNameLike)*")  # Use -like for wildcards
         ) -and
         ($_.PrivRole -eq $exception.role) -and
         ($_.ObjectType -eq $exception.azScopeType) -and
