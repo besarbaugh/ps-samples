@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    Adds a new exception to the exceptions.json file after validating the schema and following CSA rules (if enforced).
+    Adds a new exception to the exceptions.json file after validating the schema and preventing duplicates.
 
 .DESCRIPTION
-    This function adds a new exception to the exceptions.json file. It supports both spnObjectID-based exceptions 
-    and spnNameLike patterns, ensuring mutual exclusivity. The function validates the tenant and spnEonid when adding spnNameLike patterns.
-    The function integrates wildcard lookups for AppDisplayName patterns and Azure object name patterns.
-    It includes an optional 'removalCount' switch to show how many entries from the dataset would be removed by this exception.
+    This function adds a new exception to the exceptions.json file after validating its schema. It supports both 
+    spnObjectID-based exceptions and spnNameLike patterns, ensuring mutual exclusivity. The function validates the 
+    tenant and spnEonid when adding spnNameLike patterns. Wildcard lookups for AppDisplayName and AzureObjectName 
+    are supported. The function also prevents exact duplicate exceptions from being added to the exceptions.json file.
 
 .PARAMETER spnObjectID
     The SPN Object ID for a single SPN-based exception. This is mutually exclusive with spnNameLike.
@@ -50,6 +50,11 @@
 .PARAMETER datasetPath
     The file path for the dataset (CSV). Defaults to the path specified in config.json.
 
+.NOTES
+    Author: Brian Sarbaugh
+    Version: 1.0.3
+    This function prevents the addition of exact duplicate exceptions and validates the schema before adding.
+
 .EXAMPLE
     Add-Exception -spnObjectID "SPN1234" -azScopeType "resourceGroup" -role "Owner"
     
@@ -59,52 +64,35 @@
     Add-Exception -spnNameLike "*sampleApp*" -azScopeType "managementGroup" -role "Contributor" -spnEonid "EON123" -tenant "prodten"
     
     Adds an exception for SPNs with a name-like pattern, granting Contributor role on any managementGroup, filtered by spnEonid.
-
-.NOTES
-    Author: Brian Sarbaugh
-    Version: 1.0.2
 #>
 
 function Add-Exception {
     [CmdletBinding(DefaultParameterSetName = 'spnObjectIDSet')]
     param(
-        # spnObjectIDSet - Tenant and EonID are derived from dataset
         [Parameter(Mandatory = $true, ParameterSetName = 'spnObjectIDSet')][string]$spnObjectID,
-
-        # spnNameLikeSet - Handles name-like SPN cases, tenant and spnEonid required
         [Parameter(Mandatory = $true, ParameterSetName = 'spnNameLikeSet')][string]$spnNameLike,
         [Parameter(Mandatory = $true, ParameterSetName = 'spnNameLikeSet')][string]$spnEonid,
         [Parameter(Mandatory = $true, ParameterSetName = 'spnNameLikeSet')][ValidateSet('prodten', 'qaten', 'devten')][string]$tenant,
-
-        # Mandatory for all parameter sets
         [Parameter(Mandatory = $true)][ValidateSet('managementGroup', 'resourceGroup', 'subscription')][string]$azScopeType,
-
         [Parameter(Mandatory = $true)][ValidateSet('Owner', 'Contributor', 'User Access Administrator', 'AppDevContributor')][string]$role,
-
-        # These two parameters are mutually exclusive
-        [Parameter(Mandatory = $false)][string]$azObjectScopeID,  # Used for specific object scope
-        [Parameter(Mandatory = $false)][string]$azObjectNameLike,  # Used for object name-like pattern
-
-        [Parameter(Mandatory = $false)][string]$SecArch,  # Mutually exclusive with ActionPlan
-        [Parameter(Mandatory = $false)][string]$ActionPlan,  # Mutually exclusive with SecArch
-        [Parameter(Mandatory = $false)][datetime]$expiration_date,  # Required for ActionPlan
-
-        [Parameter(Mandatory = $false)][string]$exceptionsPath,  # File path for exceptions.json
-        [Parameter(Mandatory = $false)][string]$datasetPath,  # Dataset path (optional, default to config.json)
-
-        [Parameter(Mandatory = $false)][switch]$removalCount  # Optional switch to count how many entries would be removed by this exception
+        [Parameter(Mandatory = $false)][string]$azObjectScopeID,
+        [Parameter(Mandatory = $false)][string]$azObjectNameLike,
+        [Parameter(Mandatory = $false)][string]$SecArch,
+        [Parameter(Mandatory = $false)][string]$ActionPlan,
+        [Parameter(Mandatory = $false)][datetime]$expiration_date,
+        [Parameter(Mandatory = $false)][string]$exceptionsPath,
+        [Parameter(Mandatory = $false)][string]$datasetPath,
+        [Parameter(Mandatory = $false)][switch]$removalCount
     )
 
     try {
-        # Load configuration settings from config.json
+        # Load configuration settings
         $configPath = ".\config.json"
         if (-not (Test-Path -Path $configPath)) {
-            throw "config.json not found. Please ensure the configuration file is present."
+            throw "config.json not found."
         }
-
         $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
 
-        # Set the exceptionsPath and datasetPath from config.json if not provided
         if (-not $exceptionsPath) {
             $exceptionsPath = $config.exceptionsPath
         }
@@ -114,13 +102,11 @@ function Add-Exception {
             $dataset = Import-Csv -Path $datasetPath
         }
 
-        # Handle spnObjectIDSet (tenant and EonID are derived)
+        # Handle spnObjectID logic
         if ($PSCmdlet.ParameterSetName -eq 'spnObjectIDSet') {
             $spnDetails = $dataset | Where-Object { $_.AppObjectID -ieq $spnObjectID } | Select-Object -First 1
             if ($spnDetails) {
                 $spnEonid = $spnDetails.AppEonid
-
-                # Parse tenant based on 2nd character of AppDisplayName section
                 $tenantChar = $spnDetails.AppDisplayName[2]
                 switch ($tenantChar) {
                     'p' { $tenant = 'prodten' }
@@ -129,31 +115,16 @@ function Add-Exception {
                     default { throw "Invalid tenant identifier derived from AppDisplayName." }
                 }
             } else {
-                throw "SPN details could not be found in the dataset for spnObjectID."
+                throw "SPN details not found for spnObjectID."
             }
         }
 
-        # Handle spnNameLikeSet (wildcard lookup for spnNameLike, tenant and spnEonid must be provided as input)
+        # Handle spnNameLike logic
         if ($PSCmdlet.ParameterSetName -eq 'spnNameLikeSet') {
             $matchedSPNs = $dataset | Where-Object { $_.AppDisplayName -icontains "$spnNameLike" }
-
             if ($matchedSPNs.Count -eq 0) {
                 throw "No SPN found with AppDisplayName matching the spnNameLike pattern."
             }
-        }
-
-        # Ensure mutually exclusive parameters
-        if ($spnObjectID -and $spnNameLike) {
-            throw "Cannot use both spnObjectID and spnNameLike at the same time."
-        }
-        if ($azObjectScopeID -and $azObjectNameLike) {
-            throw "Cannot use both azObjectScopeID and azObjectNameLike at the same time."
-        }
-        if ($SecArch -and $ActionPlan) {
-            throw "Cannot have both SecArch and ActionPlan."
-        }
-        if ($ActionPlan -and -not $expiration_date) {
-            throw "ActionPlan requires an expiration date."
         }
 
         # Initialize the exception object
@@ -161,7 +132,7 @@ function Add-Exception {
             azScopeType = $azScopeType
             role = $role
             tenant = $tenant
-            spnEonid = $spnEonid  # Ensure spnEonid is always included in the exception
+            spnEonid = $spnEonid
             date_added = (Get-Date).ToString('MM/dd/yyyy')
         }
 
@@ -170,59 +141,51 @@ function Add-Exception {
         if ($azObjectScopeID) { $exception.azObjectScopeID = $azObjectScopeID }
         if ($azObjectNameLike) { $exception.azObjectNameLike = $azObjectNameLike }
         if ($SecArch) { $exception.SecArch = $SecArch }
-        if ($ActionPlan) { 
-            $exception.ActionPlan = $ActionPlan 
-            $exception.expiration_date = $expiration_date 
+        if ($ActionPlan) {
+            $exception.ActionPlan = $ActionPlan
+            $exception.expiration_date = $expiration_date
         }
 
-        # Check if the exceptions.json file exists, create if it does not
+        # Read exceptions and prevent exact duplicates
         if (-not (Test-Path -Path $exceptionsPath)) {
-            $exceptions = @()  # Initialize as an empty array if the file does not exist
+            $exceptions = @()
         } else {
-            # Read existing exceptions, ensure it's an array or initialize as an empty array
             [array]$exceptions = Get-Content -Raw -Path $exceptionsPath | ConvertFrom-Json
         }
 
-        # Add the new exception to the list
+        if ($exceptions -contains $exception) {
+            throw "An identical exception already exists."
+        }
+
+        # Add the new exception
         $exceptions += $exception
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
-if ($removalCount) {
-    $removalMatches = $dataset | Where-Object {
-        # Initialize boolean for spn and azure object checks
-        $spnMatch = $false
-        $azObjectMatch = $false
+        # RemovalCount logic
+        if ($removalCount) {
+            $removalMatches = $dataset | Where-Object {
+                $spnMatch = $false
+                $azObjectMatch = $false
 
-        # Handle spnObjectID vs spnNameLike logic
-        if ($exception.spnObjectID) {
-            # If using spnObjectID, ignore spnNameLike filtering
-            $spnMatch = ($_.AppObjectID -ieq $exception.spnObjectID)
-        } elseif ($exception.spnNameLike) {
-            # If using spnNameLike, ignore spnObjectID filtering
-            $spnMatch = ($_.AppDisplayName -ilike "$exception.spnNameLike")
+                if ($exception.spnObjectID) {
+                    $spnMatch = ($_.AppObjectID -ieq $exception.spnObjectID)
+                } elseif ($exception.spnNameLike) {
+                    $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+                }
+
+                if ($exception.azObjectScopeID) {
+                    $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+                } elseif ($exception.azObjectNameLike) {
+                    $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+                }
+
+                $spnMatch -and $azObjectMatch -and
+                ($_.PrivRole -ieq $exception.role) -and
+                ($_.ObjectType -ieq $exception.azScopeType) -and
+                ($_.Tenant -ieq $exception.tenant)
+            }
+            Write-Host "Removal count: $($removalMatches.Count)"
         }
-
-        # Handle azObjectScopeID vs azObjectNameLike logic
-        if ($exception.azObjectScopeID) {
-            # If using azObjectScopeID, ignore azObjectNameLike filtering
-            $azObjectMatch = ($_.AzureObjectScopeID -ieq "*$($exception.azObjectNameLike)*"
-        } elseif ($exception.azObjectNameLike) {
-            # If using azObjectNameLike, ignore azObjectScopeID filtering
-            $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
-        }
-
-        # Check that both spnMatch and azObjectMatch are true, and role, azScopeType, and tenant also match
-        $spnMatch -and $azObjectMatch -and
-        ($_.PrivRole -ieq $exception.role) -and
-        ($_.ObjectType -ieq $exception.azScopeType) -and
-        ($_.Tenant -ieq $exception.tenant)
-    }
-    Write-Host "Removal count: $($removalMatches.Count)"
-}
-
-}
-
-}
     }
     catch {
         Write-Error "An error occurred: $_"
