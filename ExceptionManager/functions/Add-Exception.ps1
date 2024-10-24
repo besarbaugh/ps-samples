@@ -119,14 +119,13 @@ function Add-Exception {
             $spnDetails = $dataset | Where-Object { $_.AppObjectID -ieq $spnObjectID } | Select-Object -First 1
             if ($spnDetails) {
                 $spnEonid = $spnDetails.AppEonid
-                $spnEnv = $spnDetails.AppEnv
 
                 # Parse tenant based on 2nd character of AppDisplayName section
                 $tenantChar = $spnDetails.AppDisplayName[2]
                 switch ($tenantChar) {
-                    '1' { $tenant = 'prodten' }
-                    '2' { $tenant = 'qaten' }
-                    '3' { $tenant = 'devten' }
+                    'p' { $tenant = 'prodten' }
+                    'q' { $tenant = 'qaten' }
+                    'd' { $tenant = 'devten' }
                     default { throw "Invalid tenant identifier derived from AppDisplayName." }
                 }
             } else {
@@ -136,14 +135,10 @@ function Add-Exception {
 
         # Handle spnNameLikeSet (wildcard lookup for spnNameLike, tenant and spnEonid must be provided as input)
         if ($PSCmdlet.ParameterSetName -eq 'spnNameLikeSet') {
-            $matchedSPNs = $dataset | Where-Object { $_.AppDisplayName -ilike "*$spnNameLike*" }
+            $matchedSPNs = $dataset | Where-Object { $_.AppDisplayName -icontains "$spnNameLike" }
 
             if ($matchedSPNs.Count -eq 0) {
                 throw "No SPN found with AppDisplayName matching the spnNameLike pattern."
-            }
-            elseif ($matchedSPNs.Count -gt 0) {
-                # Use the spnNameLike, spnEonid, and tenant from input (not dataset-derived)
-                $spnEonid = $spnEonid  # Taken from input, not dataset
             }
         }
 
@@ -195,8 +190,8 @@ function Add-Exception {
         # RemovalCount logic
         if ($removalCount) {
             $removalMatches = $dataset | Where-Object {
-                ($_.AppObjectID -eq $exception.spnObjectID -or $_.AppDisplayName -ilike "*$exception.spnNameLike*") -and
-                ($_.AzureObjectScopeID -eq $exception.azObjectScopeID -or $_.ObjectName -ilike "*$exception.azObjectNameLike*") -and
+                ($_.AppObjectID -eq $exception.spnObjectID -or $_.AppDisplayName -icontains "$exception.spnNameLike") -and
+                ($_.AzureObjectScopeID -eq $exception.azObjectScopeID -or $_.ObjectName -icontains "$exception.azObjectNameLike") -and
                 ($_.PrivRole -eq $exception.role) -and
                 ($_.ObjectType -eq $exception.azScopeType) -and
                 ($_.Tenant -ieq $exception.tenant)
