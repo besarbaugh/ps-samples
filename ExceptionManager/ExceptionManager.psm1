@@ -9,7 +9,7 @@
 . "$PSScriptRoot\functions\Get-Dataset.ps1"
 . "$PSScriptRoot\functions\Add-Exception.ps1"
 . "$PSScriptRoot\functions\Test-SchemaValidation.ps1"
-. "$PSScriptRoot\functions\Remove-Exception.ps1"
+. "$PSScriptRoot\functions\Remove-Exceptions.ps1"
 
 # Export module members
 Export-ModuleMember -Function Get-Dataset, Add-Exception, Test-SchemaValidation, Remove-Exception

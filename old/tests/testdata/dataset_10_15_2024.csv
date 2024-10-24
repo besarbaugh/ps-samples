@@ -1,0 +1,5 @@
+AppEonid,AppEnv,AppName,AppObjectID,PrivRole,AzureScopeType,AzureObjectScopeID,AzureObjectName
+EON123,Prod,App1,AppObject123,Owner,RG,RGObjectID1,RGName1
+EON456,QA,App2,AppObject456,Contributor,MG,MGObjectID2,MGName2
+EON789,Dev,App3,AppObject789,User Access Administrator,Sub,SubObjectID3,SubName3
+EON012,UAT,App4,AppObject012,AppDevContributor,RG,RGObjectID4,RGName4

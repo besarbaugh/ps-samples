@@ -1,0 +1,6 @@
+{
+  "csaEnforced": false,
+  "datasetDir": ".\\testdata",
+  "filenamePattern": "dataset_",
+  "exceptionsPath": ".\\exceptions.json"
+}
