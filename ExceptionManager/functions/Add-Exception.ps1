@@ -196,25 +196,25 @@ if ($removalCount) {
         # Handle spnObjectID vs spnNameLike logic
         if ($exception.spnObjectID) {
             # If using spnObjectID, ignore spnNameLike filtering
-            $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
+            $spnMatch = ($_.AppObjectID -ieq $exception.spnObjectID)
         } elseif ($exception.spnNameLike) {
             # If using spnNameLike, ignore spnObjectID filtering
-            $spnMatch = ($_.AppDisplayName -icontains "$exception.spnNameLike")
+            $spnMatch = ($_.AppDisplayName -ilike "$exception.spnNameLike")
         }
 
         # Handle azObjectScopeID vs azObjectNameLike logic
         if ($exception.azObjectScopeID) {
             # If using azObjectScopeID, ignore azObjectNameLike filtering
-            $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+            $azObjectMatch = ($_.AzureObjectScopeID -ieq "*$($exception.azObjectNameLike)*"
         } elseif ($exception.azObjectNameLike) {
             # If using azObjectNameLike, ignore azObjectScopeID filtering
-            $azObjectMatch = ($_.ObjectName -icontains "$exception.azObjectNameLike")
+            $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
         }
 
         # Check that both spnMatch and azObjectMatch are true, and role, azScopeType, and tenant also match
         $spnMatch -and $azObjectMatch -and
-        ($_.PrivRole -eq $exception.role) -and
-        ($_.ObjectType -eq $exception.azScopeType) -and
+        ($_.PrivRole -ieq $exception.role) -and
+        ($_.ObjectType -ieq $exception.azScopeType) -and
         ($_.Tenant -ieq $exception.tenant)
     }
     Write-Host "Removal count: $($removalMatches.Count)"
