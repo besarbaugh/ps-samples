@@ -161,33 +161,43 @@ function Add-Exception {
         $exceptions += $exception
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
-        # RemovalCount logic
         if ($removalCount) {
-            $removalMatches = $dataset | Where-Object {
-                $spnMatch = $false
-                $azObjectMatch = $false
+    $removalMatches = $dataset | Where-Object {
+        # Initialize matching conditions
+        $spnMatch = $false
+        $azObjectMatch = $false
 
-                if ($exception.spnObjectID) {
-                    $spnMatch = ($_.AppObjectID -ieq $exception.spnObjectID)
-                } elseif ($exception.spnNameLike) {
-                    $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
-                }
+        # Handle spnObjectID vs spnNameLike logic
+        if ($exception.spnObjectID) {
+            # If spnObjectID is provided, it applies to all objects of the given scope type
+            $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
+        } elseif ($exception.spnNameLike) {
+            # If using spnNameLike, ignore spnObjectID filtering
+            $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+        }
 
-                if ($exception.azObjectScopeID) {
-                    $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
-                } elseif (-not $exception.azObjectScopeID -and -not $exception.azObjectNameLike) {
-                    # If no azObjectScopeID and no azObjectNameLike, it applies to all objects of the scope
-                    $azObjectMatch = $true
-                } elseif ($exception.azObjectNameLike) {
-                    $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
-                }
+        # Handle azObjectScopeID vs azObjectNameLike logic
+        if ($exception.azObjectScopeID) {
+            # If using azObjectScopeID, ignore azObjectNameLike filtering
+            $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+        } elseif (-not $exception.azObjectScopeID -and -not $exception.azObjectNameLike) {
+            # If no azObjectScopeID and no azObjectNameLike, apply to all objects of the scope type
+            $azObjectMatch = $true
+        } elseif ($exception.azObjectNameLike) {
+            # If using azObjectNameLike, ignore azObjectScopeID filtering
+            $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+        }
 
-                $spnMatch -and $azObjectMatch -and
-                ($_.PrivRole -ieq $exception.role) -and
-                ($_.ObjectType -ieq $exception.azScopeType) -and
-                ($_.Tenant -ieq $exception.tenant)
-            }
-            Write-Host "Removal count: $($removalMatches.Count)"
+        # Check if all criteria match (SPN, Azure object, role, scope type, and tenant)
+        $spnMatch -and $azObjectMatch -and
+        ($_.PrivRole -eq $exception.role) -and
+        ($_.ObjectType -eq $exception.azScopeType) -and
+        ($_.Tenant -eq $exception.tenant)
+    }
+
+    # Output the number of matches found
+    Write-Host "Removal count: $($removalMatches.Count)"
+}
         }
     }
     catch {
