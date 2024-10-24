@@ -13,7 +13,7 @@
     The SPN Object ID for a single SPN-based exception. This is mutually exclusive with spnNameLike.
 
 .PARAMETER spnNameLike
-    A string pattern for a name-like SPN exception. Wildcards are automatically added. This is mutually exclusive with spnObjectID. Requires spnEonid.
+    A wildcard pattern for a name-like SPN exception. This is mutually exclusive with spnObjectID. Requires spnEonid.
 
 .PARAMETER azScopeType
     The type of Azure scope (managementGroup, resourceGroup, subscription). Mandatory for all exceptions.
@@ -28,7 +28,7 @@
     A wildcard pattern for an Azure object name. Mutually exclusive with azObjectScopeID.
 
 .PARAMETER tenant
-    The tenant identifier. Accepted values: "prodten", "qaten", "devten". Required if spnObjectID is used.
+    The tenant identifier. Accepted values: "prodten", "qaten", "devten". Mandatory for spnNameLike cases.
 
 .PARAMETER spnEonid
     The EonID for the SPN. Required for spnNameLike patterns.
@@ -52,19 +52,14 @@
     The file path for the dataset (CSV). Defaults to the path specified in config.json.
 
 .EXAMPLE
-    Add-Exception -spnObjectID "SPN1234" -azScopeType "resourceGroup" -role "Owner" -tenant "prodten"
+    Add-Exception -spnObjectID "SPN1234" -azScopeType "resourceGroup" -role "Owner"
     
-    Adds an exception for a specific SPN object ID, granting Owner role on any resourceGroup within the prodten tenant.
+    Adds an exception for a specific SPN object ID, granting Owner role on any resourceGroup. Tenant and spnEonid are derived.
 
 .EXAMPLE
-    Add-Exception -spnNameLike "sampleApp" -azScopeType "managementGroup" -role "Contributor" -spnEonid "EON123"
+    Add-Exception -spnNameLike "*sampleApp*" -azScopeType "managementGroup" -role "Contributor" -spnEonid "EON123" -tenant "prodten"
     
     Adds an exception for SPNs with a name-like pattern, granting Contributor role on any managementGroup, filtered by spnEonid.
-
-.EXAMPLE
-    Add-Exception -spnObjectID "SPN1234" -azScopeType "subscription" -role "User Access Administrator" -SecArch "SEC123"
-    
-    Adds an exception with SecArch approval for a specific SPN object ID, granting User Access Administrator role on a subscription.
 
 .NOTES
     Author: Brian Sarbaugh
@@ -74,10 +69,10 @@
 function Add-Exception {
     [CmdletBinding(DefaultParameterSetName = 'spnObjectIDSet')]
     param(
-        # spnObjectIDSet - Requires tenant and handles single SPN object ID cases
+        # spnObjectIDSet - Tenant and EonID are derived from dataset
         [Parameter(Mandatory = $true, ParameterSetName = 'spnObjectIDSet')][string]$spnObjectID,
 
-        # spnNameLikeSet - Handles name-like SPN cases
+        # spnNameLikeSet - Handles name-like SPN cases, tenant required
         [Parameter(Mandatory = $true, ParameterSetName = 'spnNameLikeSet')][string]$spnNameLike,
 
         # Mandatory for all parameter sets
@@ -89,8 +84,8 @@ function Add-Exception {
         [Parameter(Mandatory = $false)][string]$azObjectScopeID,  # Used for specific object scope
         [Parameter(Mandatory = $false)][string]$azObjectNameLike,  # Used for object name-like pattern
 
-        # spnObjectIDSet requires tenant
-        [Parameter(Mandatory = $true, ParameterSetName = 'spnObjectIDSet')][ValidateSet('prodten', 'qaten', 'devten')][string]$tenant,
+        # spnNameLikeSet requires tenant
+        [Parameter(Mandatory = $true, ParameterSetName = 'spnNameLikeSet')][ValidateSet('prodten', 'qaten', 'devten')][string]$tenant,
 
         [Parameter(Mandatory = $false)][string]$spnEonid,  # EonID required for name-like SPNs (if applicable)
 
@@ -123,7 +118,7 @@ function Add-Exception {
             $dataset = Import-Csv -Path $datasetPath
         }
 
-        # Handle spnObjectIDSet (requires tenant)
+        # Handle spnObjectIDSet (tenant and EonID are derived)
         if ($PSCmdlet.ParameterSetName -eq 'spnObjectIDSet') {
             $spnDetails = $dataset | Where-Object { $_.AppObjectID -ieq $spnObjectID }
             if ($spnDetails) {
@@ -145,20 +140,11 @@ function Add-Exception {
 
         # Handle spnNameLikeSet (wildcard lookup for spnNameLike)
         if ($PSCmdlet.ParameterSetName -eq 'spnNameLikeSet') {
-            $wildcardSpnNameLike = "*$spnNameLike*"
-            $matchedSPNs = $dataset | Where-Object { $_.AppName -ilike $wildcardSpnNameLike }
+            $matchedSPNs = $dataset | Where-Object { $_.AppName -ilike "*$spnNameLike*" }
 
             if ($matchedSPNs.Count -eq 1) {
                 $spnEonid = $matchedSPNs.AppEonid
                 $spnEnv = $matchedSPNs.AppEnv
-
-                $tenantChar = $matchedSPNs.AppName[2]  # Corrected AppName for tenant lookup
-                switch ($tenantChar) {
-                    '1' { $tenant = 'prodten' }
-                    '2' { $tenant = 'qaten' }
-                    '3' { $tenant = 'devten' }
-                    default { throw "Invalid tenant identifier derived from AppName." }
-                }
             }
             elseif ($matchedSPNs.Count -eq 0) {
                 throw "No SPN found with AppName matching the spnNameLike pattern."
@@ -187,6 +173,7 @@ function Add-Exception {
             azScopeType = $azScopeType
             role = $role
             tenant = $tenant
+            spnEonid = $spnEonid  # Ensure spnEonid is always included in the exception
             date_added = (Get-Date).ToString('MM/dd/yyyy')
         }
 
