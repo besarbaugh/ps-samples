@@ -24,7 +24,7 @@
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.0.0
+    Version: 1.0.3
 #>
 
 function Filter-Exceptions {
@@ -74,7 +74,6 @@ function Filter-Exceptions {
         # Iterate over exceptions and apply filtering logic to remove matching records
         foreach ($exception in $exceptions) {
             $dataset = $dataset | Where-Object {
-                # Initialize matches for SPN and Azure object
                 $spnMatch = $false
                 $azObjectMatch = $false
 
@@ -92,12 +91,13 @@ function Filter-Exceptions {
                     $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # Remove matching records from the dataset
+                # Ensure that all matches align for removal
                 -not (
                     $spnMatch -and $azObjectMatch -and
                     ($_.PrivRole -ieq $exception.role) -and
                     ($_.ObjectType -ieq $exception.azScopeType) -and
-                    ($_.Tenant -ieq $exception.tenant)
+                    ($_.Tenant -ieq $exception.tenant) -and
+                    (-not $exception.expiration_date -or [datetime]$exception.expiration_date -gt (Get-Date))
                 )
             }
         }
