@@ -52,13 +52,13 @@
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.0.3
+    Version: 1.0.4
     This function prevents the addition of exact duplicate exceptions and validates the schema before adding.
 
 .EXAMPLE
     Add-Exception -spnObjectID "SPN1234" -azScopeType "resourceGroup" -role "Owner"
     
-    Adds an exception for a specific SPN object ID, granting Owner role on any resourceGroup. Tenant and spnEonid are derived.
+    Adds an exception for a specific SPN object ID, granting Owner role on all resourceGroups. Tenant and spnEonid are derived.
 
 .EXAMPLE
     Add-Exception -spnNameLike "*sampleApp*" -azScopeType "managementGroup" -role "Contributor" -spnEonid "EON123" -tenant "prodten"
@@ -175,6 +175,9 @@ function Add-Exception {
 
                 if ($exception.azObjectScopeID) {
                     $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
+                } elseif (-not $exception.azObjectScopeID -and -not $exception.azObjectNameLike) {
+                    # If no azObjectScopeID and no azObjectNameLike, it applies to all objects of the scope
+                    $azObjectMatch = $true
                 } elseif ($exception.azObjectNameLike) {
                     $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
