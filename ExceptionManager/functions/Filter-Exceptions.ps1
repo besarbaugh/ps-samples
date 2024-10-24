@@ -5,6 +5,7 @@
 .DESCRIPTION
     This function reads exceptions from the exceptions.json file and applies them to filter out matching records 
     from the provided dataset. It supports both object ID-based and name-like pattern filtering for SPNs and Azure objects.
+    It removes matching records from the dataset based on the filtering rules.
 
 .PARAMETER datasetObject
     Optional parameter. A PowerShell object (array of objects) representing the dataset to be filtered.
@@ -70,7 +71,7 @@ function Filter-Exceptions {
             throw "You must provide either a dataset object or a dataset CSV file path."
         }
 
-        # Iterate over exceptions and apply filtering logic
+        # Iterate over exceptions and apply filtering logic to remove matching records
         foreach ($exception in $exceptions) {
             $dataset = $dataset | Where-Object {
                 # Initialize matches for SPN and Azure object
@@ -91,7 +92,7 @@ function Filter-Exceptions {
                     $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # Return dataset where no match exists (filter out matching records)
+                # Remove matching records from the dataset
                 -not (
                     $spnMatch -and $azObjectMatch -and
                     ($_.PrivRole -ieq $exception.role) -and
