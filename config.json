@@ -1,0 +1,6 @@
+{
+    "csaEnforced": true,
+    "exceptionsPath": "C:\\Path\\To\\Production\\exceptions.json",
+    "datasetDir": "C:\\Path\\To\\Production\\Dataset",
+    "filenamePattern": "production_dataset_"
+}
