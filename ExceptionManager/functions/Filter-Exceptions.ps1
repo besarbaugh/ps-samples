@@ -1,112 +1,86 @@
 <#
 .SYNOPSIS
-    Filters exceptions from a dataset by removing line items based on the exceptions.json file.
+    Filters out entries from the dataset based on the exceptions.json file.
 
 .DESCRIPTION
-    This function filters a dataset by removing entries that match the criteria specified in the exceptions.json file. 
-    It handles both SPN object ID-based exceptions and SPN name-like patterns, with mutual exclusivity. It also supports 
-    filtering by Azure object scope or name-like patterns, and by role, scope type, and tenant. Expired ActionPlan exceptions are ignored.
+    This function processes the dataset and removes any entries that match the exceptions specified in the 
+    exceptions.json file. It supports mutually exclusive parameters such as spnObjectID vs spnNameLike, and 
+    azObjectScopeID vs azObjectNameLike. It ensures spnEonid is mandatory for all exceptions, and also supports 
+    matching criteria like role, scope type, and tenant.
 
 .PARAMETER exceptionsPath
-    The file path for the exceptions.json file. Defaults to the path specified in config.json.
+    The file path for the exceptions.json file. Defaults to ".\exceptions.json" if not provided.
 
 .PARAMETER datasetPath
-    The file path for the dataset (CSV). Defaults to the path specified in config.json.
+    The file path for the dataset CSV file. Defaults to ".\dataset.csv" if not provided.
 
-.PARAMETER outputPath
-    The file path to save the filtered dataset after removing exceptions.
+.EXAMPLE
+    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv"
+    
+    Filters out the dataset entries based on the exceptions defined in the exceptions.json file.
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.0.0
-    This function filters out dataset entries that match exceptions in exceptions.json.
-
-.EXAMPLE
-    Filter-Exceptions -datasetPath "dataset.csv" -outputPath "filtered_dataset.csv"
-    
-    Filters out exceptions from the dataset and saves the filtered dataset to a new file.
+    Version: 1.0.4
+    Filters the dataset according to the rules defined in the exceptions.json file.
 #>
 
 function Filter-Exceptions {
-    param(
-        [Parameter(Mandatory = $false)][string]$exceptionsPath,  # Path to exceptions.json
-        [Parameter(Mandatory = $false)][string]$datasetPath,  # Path to the dataset CSV
-        [Parameter(Mandatory = $true)][string]$outputPath  # Path to save the filtered dataset
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $false)][string]$exceptionsPath = ".\exceptions.json",
+        [Parameter(Mandatory = $false)][string]$datasetPath = ".\dataset.csv"
     )
 
     try {
-        # Load configuration settings
-        $configPath = ".\config.json"
-        if (-not (Test-Path -Path $configPath)) {
-            throw "config.json not found."
-        }
-        $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
-
-        if (-not $exceptionsPath) {
-            $exceptionsPath = $config.exceptionsPath
-        }
-        if (-not $datasetPath) {
-            $datasetPath = $config.datasetPath
-        }
-
-        # Load dataset and exceptions
-        $dataset = Import-Csv -Path $datasetPath
+        # Load exceptions from the JSON file and dataset from CSV
         if (-not (Test-Path -Path $exceptionsPath)) {
-            throw "exceptions.json not found at $exceptionsPath"
+            throw "Exceptions file not found at path: $exceptionsPath"
         }
+
+        if (-not (Test-Path -Path $datasetPath)) {
+            throw "Dataset file not found at path: $datasetPath"
+        }
+
         $exceptions = Get-Content -Raw -Path $exceptionsPath | ConvertFrom-Json
+        $dataset = Import-Csv -Path $datasetPath
 
-        # Loop through each exception and remove matching entries from the dataset
+        # Iterate through each exception to filter out matching entries from the dataset
         foreach ($exception in $exceptions) {
-            if ($exception.ActionPlan -and ($exception.expiration_date -lt (Get-Date))) {
-                # Skip expired ActionPlan exceptions
-                continue
-            }
-
-            # Remove matching entries from the dataset
             $dataset = $dataset | Where-Object {
                 $spnMatch = $false
                 $azObjectMatch = $false
 
                 # Handle spnObjectID vs spnNameLike logic
                 if ($exception.spnObjectID) {
-                    # If spnObjectID is provided, match it
                     $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
                 } elseif ($exception.spnNameLike) {
-                    # If spnNameLike is provided, match using wildcard
                     $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
-                } else {
-                    # Apply to all if no SPN criteria are provided
-                    $spnMatch = $true
                 }
 
                 # Handle azObjectScopeID vs azObjectNameLike logic
                 if ($exception.azObjectScopeID) {
-                    # If azObjectScopeID is provided, match it
                     $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
-                } elseif ($exception.azObjectNameLike) {
-                    # If azObjectNameLike is provided, match using wildcard
-                    $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
-                } else {
-                    # Apply to all if no Azure object criteria are provided
+                } elseif (-not $exception.azObjectScopeID -and -not $exception.azObjectNameLike) {
+                    # Apply to all objects of the scope type
                     $azObjectMatch = $true
+                } elseif ($exception.azObjectNameLike) {
+                    $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # Exclude entries that match all criteria (SPN, Azure object, role, scope type, tenant)
-                -not ($spnMatch -and $azObjectMatch -and
+                # Check if all criteria match (SPN, Azure object, role, scope type, and tenant)
+                $spnMatch -and $azObjectMatch -and
                 ($_.PrivRole -eq $exception.role) -and
                 ($_.ObjectType -eq $exception.azScopeType) -and
-                ($_.Tenant -eq $exception.tenant))
+                ($_.Tenant -eq $exception.tenant)
             }
         }
 
-        # Save the filtered dataset
-        $dataset | Export-Csv -Path $outputPath -NoTypeInformation
-        Write-Host "Filtered dataset saved to $outputPath"
+        Write-Host "Filtered dataset successfully processed."
+        return $dataset
 
-    }
-    catch {
-        Write-Error "An error occurred: $_"
+    } catch {
+        Write-Error "An error occurred while filtering exceptions: $_"
         throw $_
     }
 }
