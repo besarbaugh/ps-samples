@@ -1,49 +1,84 @@
 <#
 .SYNOPSIS
-    Filters out entries from the dataset based on the exceptions.json file.
+    Filters out entries from the dataset based on the exceptions in exceptions.json or a provided PSObject.
 
 .DESCRIPTION
-    This function processes the dataset and removes any entries that match the exceptions specified in the 
-    exceptions.json file. It supports mutually exclusive parameters such as spnObjectID vs spnNameLike, and 
-    azObjectScopeID vs azObjectNameLike. It ensures spnEonid is mandatory for all exceptions, and also supports 
-    matching criteria like role, scope type, and tenant.
+    This function processes the dataset (CSV or PSObject) and filters out any entries that match the exceptions 
+    defined in exceptions.json or a provided object. It ensures the validation logic aligns with the removalCount 
+    logic in Add-Exception.ps1, handling mutually exclusive fields like spnObjectID vs spnNameLike and azObjectScopeID 
+    vs azObjectNameLike. The user can choose to input and output in either CSV or PSObject format.
 
 .PARAMETER exceptionsPath
-    The file path for the exceptions.json file. Defaults to ".\exceptions.json" if not provided.
+    The file path for the exceptions.json file. Defaults to the value from config.json if not provided.
 
 .PARAMETER datasetPath
-    The file path for the dataset CSV file. Defaults to ".\dataset.csv" if not provided.
+    The file path for the dataset (CSV). Defaults to the value from config.json if not provided.
+
+.PARAMETER datasetObject
+    A PowerShell object (array of objects) representing the dataset. If provided, this will be used instead of the CSV.
+
+.PARAMETER outputAsCsv
+    A switch parameter to indicate if the output should be written to a CSV file. If this switch is not used, the result will be returned as a PSObject.
+
+.PARAMETER outputCsvPath
+    Optional. The file path to write the filtered results if outputAsCsv is used. Defaults to filtered_output.csv.
 
 .EXAMPLE
-    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv"
+    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv" -outputAsCsv
     
-    Filters out the dataset entries based on the exceptions defined in the exceptions.json file.
+    Filters the dataset based on exceptions and outputs the result as a CSV file.
+
+.EXAMPLE
+    Filter-Exceptions -datasetObject $dataset -exceptionsPath ".\exceptions.json"
+    
+    Filters the provided dataset object based on exceptions and returns the result as a PSObject.
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.0.4
-    Filters the dataset according to the rules defined in the exceptions.json file.
+    Version: 1.1.0
+    Filters the dataset according to the exceptions defined in exceptions.json or a provided object, and outputs the result in either PSObject or CSV format.
 #>
 
 function Filter-Exceptions {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $false)][string]$exceptionsPath = ".\exceptions.json",
-        [Parameter(Mandatory = $false)][string]$datasetPath = ".\dataset.csv"
+        [Parameter(Mandatory = $false)][string]$datasetPath = ".\dataset.csv",
+        [Parameter(Mandatory = $false)][array]$datasetObject,  # Accepts a PowerShell object array
+        [Parameter(Mandatory = $false)][switch]$outputAsCsv,   # If set, output will be CSV
+        [Parameter(Mandatory = $false)][string]$outputCsvPath = ".\filtered_output.csv"  # Output CSV file path
     )
 
     try {
-        # Load exceptions from the JSON file and dataset from CSV
+        # Load configuration settings from config.json if paths are not provided
+        $configPath = ".\config.json"
+        if (-not (Test-Path -Path $configPath)) {
+            throw "config.json not found."
+        }
+        $config = Get-Content -Raw -Path $configPath | ConvertFrom-Json
+
+        if (-not $exceptionsPath) {
+            $exceptionsPath = $config.exceptionsPath
+        }
+        if (-not $datasetPath -and -not $datasetObject) {
+            $datasetPath = $config.datasetPath
+        }
+
+        # Load exceptions from the JSON file
         if (-not (Test-Path -Path $exceptionsPath)) {
             throw "Exceptions file not found at path: $exceptionsPath"
         }
-
-        if (-not (Test-Path -Path $datasetPath)) {
-            throw "Dataset file not found at path: $datasetPath"
-        }
-
         $exceptions = Get-Content -Raw -Path $exceptionsPath | ConvertFrom-Json
-        $dataset = Import-Csv -Path $datasetPath
+
+        # Load dataset either from CSV or PSObject input
+        $dataset = if ($datasetObject) {
+            $datasetObject
+        } else {
+            if (-not (Test-Path -Path $datasetPath)) {
+                throw "Dataset file not found at path: $datasetPath"
+            }
+            Import-Csv -Path $datasetPath
+        }
 
         # Iterate through each exception to filter out matching entries from the dataset
         foreach ($exception in $exceptions) {
@@ -53,6 +88,7 @@ function Filter-Exceptions {
 
                 # Handle spnObjectID vs spnNameLike logic
                 if ($exception.spnObjectID) {
+                    # Apply to all objects of the given scope type
                     $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
                 } elseif ($exception.spnNameLike) {
                     $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
@@ -76,8 +112,13 @@ function Filter-Exceptions {
             }
         }
 
-        Write-Host "Filtered dataset successfully processed."
-        return $dataset
+        # Output as CSV if specified, otherwise return as PSObject
+        if ($outputAsCsv) {
+            $dataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
+            Write-Host "Filtered results saved to: $outputCsvPath"
+        } else {
+            return $dataset
+        }
 
     } catch {
         Write-Error "An error occurred while filtering exceptions: $_"
