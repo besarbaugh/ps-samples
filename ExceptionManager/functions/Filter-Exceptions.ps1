@@ -35,7 +35,7 @@
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.1.0
+    Version: 1.1.1
     Filters the dataset according to the exceptions defined in exceptions.json or a provided object, and outputs the result in either PSObject or CSV format.
 #>
 
@@ -85,30 +85,30 @@ function Filter-Exceptions {
             $dataset = $dataset | Where-Object {
                 $spnMatch = $false
                 $azObjectMatch = $false
+                $tenantMatch = $true  # Default to true, modify only if tenant matching is required
 
-                # Handle spnObjectID vs spnNameLike logic
+                # Handle SPN matching (spnObjectID vs spnNameLike)
                 if ($exception.spnObjectID) {
-                    # Apply to all objects of the given scope type
                     $spnMatch = ($_.AppObjectID -eq $exception.spnObjectID)
                 } elseif ($exception.spnNameLike) {
                     $spnMatch = ($_.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+                    # Apply tenant matching only if spnNameLike is used
+                    $tenantMatch = ($_.Tenant -eq $exception.tenant)
                 }
 
-                # Handle azObjectScopeID vs azObjectNameLike logic
+                # Handle Azure Object matching (azObjectScopeID vs azObjectNameLike)
                 if ($exception.azObjectScopeID) {
                     $azObjectMatch = ($_.AzureObjectScopeID -eq $exception.azObjectScopeID)
                 } elseif (-not $exception.azObjectScopeID -and -not $exception.azObjectNameLike) {
-                    # Apply to all objects of the scope type
-                    $azObjectMatch = $true
+                    $azObjectMatch = $true  # Apply to all objects of the scope type
                 } elseif ($exception.azObjectNameLike) {
                     $azObjectMatch = ($_.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # Check if all criteria match (SPN, Azure object, role, scope type, and tenant)
-                $spnMatch -and $azObjectMatch -and
-                ($_.PrivRole -eq $exception.role) -and
-                ($_.ObjectType -eq $exception.azScopeType) -and
-                ($_.Tenant -eq $exception.tenant)
+                # Apply exclusion logic (remove entries that match all conditions)
+                -not ($spnMatch -and $azObjectMatch -and $tenantMatch -and
+                      ($_.PrivRole -eq $exception.role) -and
+                      ($_.ObjectType -eq $exception.azScopeType))
             }
         }
 
