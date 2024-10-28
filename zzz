@@ -1,0 +1,14 @@
+# Path to the JSON file
+$jsonPath = ".\data.json"
+
+# Load JSON content
+$jsonContent = Get-Content -Path $jsonPath -Raw | ConvertFrom-Json
+
+# Convert each object to a JSON string, then remove duplicates
+$uniqueContent = $jsonContent | 
+    ForEach-Object { $_ | ConvertTo-Json -Compress } | # Serialize each object
+    Select-Object -Unique |                            # Remove duplicates
+    ForEach-Object { $_ | ConvertFrom-Json }           # Convert back to PSCustomObject
+
+# Convert the deduplicated objects back to JSON and save
+$uniqueContent | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonPath
