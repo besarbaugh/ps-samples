@@ -1,14 +1,8 @@
-# Path to the JSON file
-$jsonPath = ".\data.json"
+# Replace with your actual client ID
+$clientId = "<your-client-id>"
 
-# Load JSON content
-$jsonContent = Get-Content -Path $jsonPath -Raw | ConvertFrom-Json
+# Use az rest to query Microsoft Graph API for the Service Principal
+$servicePrincipal = az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals?filter=appId eq '$clientId'" --query "value[0].id" --output tsv
 
-# Convert each object to a JSON string, then remove duplicates
-$uniqueContent = $jsonContent | 
-    ForEach-Object { $_ | ConvertTo-Json -Compress } | # Serialize each object
-    Select-Object -Unique |                            # Remove duplicates
-    ForEach-Object { $_ | ConvertFrom-Json }           # Convert back to PSCustomObject
-
-# Convert the deduplicated objects back to JSON and save
-$uniqueContent | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonPath
+# Output the object ID
+$servicePrincipal
