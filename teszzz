@@ -1,0 +1,1 @@
+=AND(COUNTIFS($A:$A, $A2, $B:$B, $B2, $D:$D, $D2, $I:$I, $I2) > 1)
