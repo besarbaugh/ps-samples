@@ -18,7 +18,6 @@ function Add-Exception {
     )
 
     try {
-        # Load configuration settings
         $configPath = ".\config.json"
         if (-not (Test-Path -Path $configPath)) {
             throw "config.json not found."
@@ -43,6 +42,7 @@ function Add-Exception {
 
         # Initialize the exception object excluding date fields
         $exception = @{
+            uniqueID = (New-Guid).Guid  # Generate a unique GUID for the exception
             spn_eonid = $spnEonid
             az_scope_type = $azScopeType
             role = $role
@@ -63,8 +63,6 @@ function Add-Exception {
 
         # Duplicate check excluding date fields
         $isDuplicate = $exceptions.$group | Where-Object {
-            ($_ | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name }) -ne 'date_added' -and
-            ($_ | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name }) -ne 'expiration_date' -and
             $_.spn_eonid -eq $exception.spn_eonid -and
             $_.az_scope_type -eq $exception.az_scope_type -and
             $_.role -eq $exception.role -and
@@ -80,11 +78,10 @@ function Add-Exception {
             throw "An identical exception already exists in $group (excluding date fields)."
         }
 
-        # Add the new exception with date fields
+        # Add date fields and save
         $exception.date_added = (Get-Date).ToString('MM/dd/yyyy')
         if ($ActionPlan) { $exception.expiration_date = $expiration_date }
 
-        # Add to the appropriate group and save
         $exceptions.$group += $exception
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
