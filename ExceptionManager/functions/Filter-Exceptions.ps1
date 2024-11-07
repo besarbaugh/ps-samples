@@ -49,10 +49,10 @@ function Filter-Exceptions {
 
         # Iterate through each line item and check against each exception
         foreach ($lineItem in $dataset) {
-            # Create arrays to hold multiple matches if any
-            $matchedSecArch = @()
-            $matchedActionPlan = @()
-            $matchedExpirationDate = @()
+            # Initialize properties with "NA" as default values
+            $secArch = "NA"
+            $actionPlan = "NA"
+            $expirationDate = "NA"
             $isMatched = $false
 
             foreach ($exception in $allExceptions) {
@@ -86,10 +86,18 @@ function Filter-Exceptions {
                     # Mark as matched
                     $isMatched = $true
 
-                    # Append matched exception details to the respective arrays
-                    if ($exception.SecArch) { $matchedSecArch += $exception.SecArch }
-                    if ($exception.ActionPlan) { $matchedActionPlan += $exception.ActionPlan }
-                    if ($exception.expiration_date) { $matchedExpirationDate += $exception.expiration_date }
+                    # Set values based on whether the exception is SecArch or ActionPlan
+                    if ($exception.SecArch) {
+                        $secArch = $exception.SecArch
+                        $actionPlan = "NA"
+                        $expirationDate = "NA"
+                    }
+                    elseif ($exception.ActionPlan) {
+                        $secArch = "NA"
+                        $actionPlan = $exception.ActionPlan
+                        $expirationDate = $exception.expiration_date
+                    }
+                    break  # Exit the loop once a match is found
                 }
             }
 
@@ -97,13 +105,9 @@ function Filter-Exceptions {
             if ($isMatched) {
                 # Clone the line item to add exception details if matched
                 $matchedItem = $lineItem | Select-Object *
-
-                # Convert arrays to comma-separated strings, or set to "NA" if empty
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value ($matchedSecArch -join ", " -replace "^$", "NA") -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value ($matchedActionPlan -join ", " -replace "^$", "NA") -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value ($matchedExpirationDate -join ", " -replace "^$", "NA") -Force
-
-                # Add to matching items array
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $secArch -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $actionPlan -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $expirationDate -Force
                 $matchingItems += $matchedItem
             } else {
                 # Add non-matching items directly to nonMatchingItems array
