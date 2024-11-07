@@ -1,39 +1,28 @@
-# Define paths for the old and new exceptions JSON files
-$exceptionsPath = ".\exceptions.json"
+# Define the path for the reorganized exceptions JSON file
 $newExceptionsPath = ".\exceptions_reorganized.json"
 
-# Load the existing exceptions.json
-if (-not (Test-Path -Path $exceptionsPath)) {
-    Write-Host "Error: The exceptions.json file was not found at $exceptionsPath"
+# Load the existing exceptions file
+if (-not (Test-Path -Path $newExceptionsPath)) {
+    Write-Host "Error: The exceptions_reorganized.json file was not found at $newExceptionsPath"
     exit
 }
 
-$exceptions = Get-Content -Path $exceptionsPath | ConvertFrom-Json
+$exceptions = Get-Content -Path $newExceptionsPath | ConvertFrom-Json
 
-# Initialize the new JSON structure with separate groups
-$newExceptions = @{
-    SecArchExceptions = @()
-    ActionPlanExceptions = @()
-}
-
-# Process each exception entry
-foreach ($exception in $exceptions) {
-    # Check if the exception is a SecArch exception
-    if ($exception.SecArch) {
-        # Add to SecArchExceptions group
-        $newExceptions.SecArchExceptions += $exception
-    }
-    # Check if the exception is an ActionPlan exception
-    elseif ($exception.ActionPlan) {
-        # Add to ActionPlanExceptions group
-        $newExceptions.ActionPlanExceptions += $exception
-    }
-    else {
-        Write-Host "Warning: Exception does not have SecArch or ActionPlan. Skipping."
+# Process each exception in SecArchExceptions and ActionPlanExceptions, adding a unique GUID
+foreach ($exception in $exceptions.SecArchExceptions) {
+    if (-not $exception.PSObject.Properties["uniqueID"]) {
+        $exception.uniqueID = (New-Guid).Guid
     }
 }
 
-# Convert the new structure to JSON and save it
-$newExceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $newExceptionsPath
+foreach ($exception in $exceptions.ActionPlanExceptions) {
+    if (-not $exception.PSObject.Properties["uniqueID"]) {
+        $exception.uniqueID = (New-Guid).Guid
+    }
+}
 
-Write-Host "Conversion completed. New file saved at $newExceptionsPath"
+# Save the updated structure back to the JSON file
+$exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $newExceptionsPath
+
+Write-Host "Unique GUIDs added to each exception in $newExceptionsPath"
