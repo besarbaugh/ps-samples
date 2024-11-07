@@ -4,9 +4,11 @@
 
 .DESCRIPTION
     This function processes the dataset (CSV or PSObject) and filters out any entries that match the exceptions 
-    defined in exceptions.json or a provided object. It includes the uniqueID (GUID) of the matched exception in the 
-    output when returning matched items. The function can return results either as a CSV or a PSObject array for 
-    further manipulation.
+    defined in exceptions.json or a provided object. It ensures the validation logic aligns with the removalCount 
+    logic in Add-Exception.ps1, handling mutually exclusive fields like spnObjectID vs spnNameLike and azObjectScopeID 
+    vs azObjectNameLike. The user can choose to input and output in either CSV or PSObject format.
+
+    The function also outputs the exception's lastModifiedBy and LastUpdated fields for tracking purposes.
 
 .PARAMETER exceptionsPath
     The file path for the exceptions.json file. Defaults to the value from config.json if not provided.
@@ -24,26 +26,22 @@
     Optional. The file path to write the filtered results if outputAsCsv is used. Defaults to filtered_output.csv.
 
 .PARAMETER outputExceptions
-    If set, the function outputs the dataset items that match exceptions (i.e., items that are excepted).
-
-.RETURNS
-    Returns a filtered dataset, with additional fields indicating if a line matches an exception. If outputExceptions is used,
-    returns items that match exceptions, otherwise returns items that do not match any exception.
+    If specified, outputs matched items instead of filtered ones, along with fields such as lastModifiedBy and LastUpdated.
 
 .EXAMPLE
-    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv" -outputAsCsv -outputExceptions
+    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv" -outputAsCsv
     
-    Filters the dataset based on exceptions and outputs matched results to a CSV file.
+    Filters the dataset based on exceptions and outputs the result as a CSV file.
 
 .EXAMPLE
-    Filter-Exceptions -datasetObject $dataset -exceptionsPath ".\exceptions.json"
+    Filter-Exceptions -datasetObject $dataset -exceptionsPath ".\exceptions.json" -outputExceptions
     
-    Filters the provided dataset object based on exceptions and returns the non-matching results as a PSObject array.
+    Filters the provided dataset object based on exceptions and returns the matching (excepted) items with details as a PSObject.
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.2.0
-    Includes the uniqueID of each matched exception in the output.
+    Version: 1.1.0
+    Filters the dataset according to the exceptions, including lastModifiedBy and LastUpdated in the output.
 #>
 
 function Filter-Exceptions {
@@ -97,14 +95,16 @@ function Filter-Exceptions {
 
         # Iterate through each line item and check against each exception
         foreach ($lineItem in $dataset) {
-            # Initialize default values
+            # Initialize properties with "NA" as default values
             $secArch = "NA"
             $actionPlan = "NA"
             $expirationDate = "NA"
+            $lastModifiedBy = "NA"
+            $lastUpdated = "NA"
             $matchCount = 0
-            $matchedUniqueID = "NA"
 
             foreach ($exception in $allExceptions) {
+                # Default to false for matching variables
                 $spnMatch = $false
                 $azObjectMatch = $false
                 $tenantMatch = $true  # Default to true, modify only if tenant matching is required
@@ -132,33 +132,29 @@ function Filter-Exceptions {
                     ($lineItem.ObjectType -eq $exception.azScopeType) -and
                     ($lineItem.AppEONID -eq $exception.spnEonid)) {
                     
-                    # Increment match count and store matched details
+                    # Increment match count
                     $matchCount++
-                    $matchedUniqueID = $exception.uniqueID
+
+                    # Only populate exception fields on the first match
                     if ($matchCount -eq 1) {
-                        # Capture exception details based on type
-                        if ($exception.SecArch) {
-                            $secArch = $exception.SecArch
-                            $actionPlan = "NA"
-                            $expirationDate = "NA"
-                        } elseif ($exception.ActionPlan) {
-                            $secArch = "NA"
-                            $actionPlan = $exception.ActionPlan
-                            $expirationDate = $exception.expiration_date
-                        }
+                        $secArch = $exception.SecArch
+                        $actionPlan = $exception.ActionPlan
+                        $expirationDate = $exception.expiration_date
+                        $lastModifiedBy = $exception.lastModifiedBy
+                        $lastUpdated = $exception.LastUpdated
                     }
                 }
             }
 
-            # Process matched and non-matched items
+            # Add to the respective output array based on match status
             if ($matchCount -gt 0) {
                 # Clone the line item to add exception details if matched
                 $matchedItem = $lineItem | Select-Object *
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $secArch -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $actionPlan -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $expirationDate -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "MatchCount" -Value $matchCount -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "MatchedUniqueID" -Value $matchedUniqueID -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "lastModifiedBy" -Value $lastModifiedBy -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "LastUpdated" -Value $lastUpdated -Force
                 $matchingItems += $matchedItem
             } else {
                 # Add non-matching items directly to nonMatchingItems array
@@ -166,7 +162,7 @@ function Filter-Exceptions {
             }
         }
 
-        # Output matched or unmatched items based on outputExceptions switch
+        # Determine which result set to output based on outputExceptions
         if ($outputExceptions) {
             if ($outputAsCsv) {
                 $matchingItems | Export-Csv -Path $outputCsvPath -NoTypeInformation
