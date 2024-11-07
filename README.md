@@ -1,123 +1,191 @@
-# ExceptionManager Usage Guide
 
-Welcome to the **ExceptionManager** module, a tool designed to manage and track over-privileged SPN exceptions. Please follow this guide carefully, especially if you need to add exceptions while Brian is out of the office.
+# ExceptionManager PowerShell Module
 
-## Pre-requisite: Unblock Remote Files
+**Author**: Brian Sarbaugh  
+**Version**: 1.1.1  
+**Last Updated**: November 2024
 
-Before using this module, ensure all files are unblocked on your machine. Files from remote sources can be blocked by default, which might prevent the module from running correctly.
+## Overview
 
-1. **Run this PowerShell command to unblock all files from the remote share:**
+The `ExceptionManager` module provides a powerful, organized system for managing Azure exceptions related to Service Principal Names (SPNs), resource roles, and Custom Security Attributes (CSAs). This module supports adding, updating, removing, and filtering exceptions while tracking modifications for auditability.
 
-    ```powershell
-    Get-ChildItem -Path "\\your-remote-share-path" -Recurse | Unblock-File
-    ```
+## Table of Contents
 
-    Replace `"\\your-remote-share-path"` with the actual path to the share containing the ExceptionManager module.
-
----
-
-## Loading the ExceptionManager Module
-
-Once the files are unblocked, load the ExceptionManager module into your session.
-
-1. **To load the module, run:**
-
-    ```powershell
-    Import-Module "\\your-remote-share-path\ExceptionManager"
-    ```
-
-2. **Verify the module is loaded by running:**
-
-    ```powershell
-    Get-Module -Name ExceptionManager
-    ```
+- [Installation](#installation)
+- [Module Setup](#module-setup)
+- [Functionality](#functionality)
+  - [Get-Dataset](#get-dataset)
+  - [Add-Exception](#add-exception)
+  - [Update-Exception](#update-exception)
+  - [Remove-Exception](#remove-exception)
+  - [Filter-Exceptions](#filter-exceptions)
+- [Configuration](#configuration)
+- [Usage Examples](#usage-examples)
+- [Testing with Pester](#testing-with-pester)
+- [Version History](#version-history)
 
 ---
 
-## Using `Get-Help` for Guidance
+## Installation
 
-All functions in the **ExceptionManager** module include detailed help documentation. You are encouraged to use PowerShell's `Get-Help` to understand how each function works.
+1. Clone the repository:
+   ```shell
+   git clone https://github.com/besarbaugh/ps-samples
+   ```
 
-1. **To view the full help documentation for the module:**
+2. Navigate to the `ExceptionManager` directory and import the module:
+   ```powershell
+   Import-Module .\ExceptionManager.psm1
+   ```
 
-    ```powershell
-    Get-Help -Name ExceptionManager
-    ```
+## Module Setup
 
-2. **To view help for specific functions (e.g., `Add-Exception`):**
+The module relies on:
+- **config.json**: Configures paths for `exceptions.json` and the dataset directory.
+- **exceptions.json**: Stores categorized exception records (SecArchExceptions and ActionPlanExceptions).
+  
+### Folder Structure
 
-    ```powershell
-    Get-Help -Name Add-Exception -Full
-    ```
+```
+ps-samples/
+└── ExceptionManager/
+    ├── functions/
+    │   ├── Add-Exception.ps1
+    │   ├── Update-Exception.ps1
+    │   ├── Remove-Exception.ps1
+    │   ├── Filter-Exceptions.ps1
+    │   └── Get-Dataset.ps1
+    ├── tests/
+    ├── config.json
+    └── exceptions.json
+```
 
-    You can also use `-Examples` to see specific usage examples.
+## Functionality
 
-    ```powershell
-    Get-Help -Name Add-Exception -Examples
-    ```
+### Get-Dataset
 
-Using `Get-Help` is the best way to ensure proper usage of each function.
+Loads a dataset from a CSV file or directly from a PowerShell object array. If a file path is provided, it loads the latest CSV file based on a specified filename pattern in the dataset directory.
+
+#### Syntax
+
+```powershell
+Get-Dataset -datasetObject $myDatasetArray
+Get-Dataset -datasetDir "C:\Datasets\" -filenamePattern "myDataset_"
+```
+
+### Add-Exception
+
+Adds a new exception to `exceptions.json` with support for modification tracking (`lastModifiedBy` and `LastUpdated`). Ensures no duplicate records by checking key fields.
+
+#### Syntax
+
+```powershell
+Add-Exception -spnEonid "EON123" -spnObjectID "SPN1234" -azScopeType "resourceGroup" -role "Owner" -SecArch "SA123" -lastModifiedBy "user@example.com"
+```
+
+### Update-Exception
+
+Updates an existing exception in `exceptions.json` using its unique identifier (`uniqueID`). Adds `LastUpdated` and `lastModifiedBy` fields for tracking.
+
+#### Syntax
+
+```powershell
+Update-Exception -uniqueID "guid-here" -role "Contributor" -lastModifiedBy "updater@example.com"
+```
+
+### Remove-Exception
+
+Removes an exception from `exceptions.json` using its `uniqueID`.
+
+#### Syntax
+
+```powershell
+Remove-Exception -uniqueID "guid-here"
+```
+
+### Filter-Exceptions
+
+Filters entries in a dataset based on exceptions defined in `exceptions.json`. It can also output matching exceptions, including the `GUID`, `LastUpdated`, and `lastModifiedBy` fields.
+
+#### Syntax
+
+```powershell
+Filter-Exceptions -datasetPath ".\dataset.csv" -outputAsCsv -outputCsvPath ".\filtered_output.csv" -outputExceptions
+```
+
+## Configuration
+
+### Setting Up `config.json`
+
+The configuration file specifies the paths for `exceptions.json` and datasets:
+- `exceptionsPath`: Path to `exceptions.json`.
+- `datasetDir`: Directory where dataset files are stored.
+- `filenamePattern`: Prefix for dataset files (e.g., "dataset_").
+
+Example `config.json`:
+
+```json
+{
+    "exceptionsPath": ".\\exceptions.json",
+    "datasetDir": ".\\data\\",
+    "filenamePattern": "myDataset_"
+}
+```
+
+## Usage Examples
+
+### Example 1: Adding an Exception
+
+```powershell
+Add-Exception -spnEonid "EON123" -spnObjectID "SPN456" -azScopeType "resourceGroup" -role "Owner" -SecArch "SA456" -lastModifiedBy "user@example.com"
+```
+
+### Example 2: Updating an Exception
+
+```powershell
+Update-Exception -uniqueID "guid-here" -role "Contributor" -lastModifiedBy "updater@example.com"
+```
+
+### Example 3: Removing an Exception
+
+```powershell
+Remove-Exception -uniqueID "guid-here"
+```
+
+### Example 4: Filtering Exceptions in a Dataset
+
+```powershell
+Filter-Exceptions -datasetPath ".\dataset.csv" -outputAsCsv -outputCsvPath ".\filtered_output.csv" -outputExceptions
+```
+
+## Testing with Pester
+
+### Running Tests
+
+The module includes Pester tests located in the `tests/` directory. Run all tests with:
+
+```powershell
+Invoke-Pester -Path .\tests
+```
+
+### Available Tests
+
+Each function has its own test file in `tests/`:
+- `Add-Exception.Tests.ps1`: Tests the `Add-Exception` function.
+- `Update-Exception.Tests.ps1`: Tests the `Update-Exception` function.
+- `Remove-Exception.Tests.ps1`: Tests the `Remove-Exception` function.
+- `Filter-Exceptions.Tests.ps1`: Tests the `Filter-Exceptions` function.
+
+## Version History
+
+### Version 1.1.1 - November 2024
+- Added `lastModifiedBy` and `LastUpdated` tracking fields.
+- Enhanced `Filter-Exceptions` to include GUID, `LastUpdated`, and `lastModifiedBy`.
+- Improved `Add-Exception` to validate email format for `lastModifiedBy`.
+
+### Version 1.0.0 - October 2024
+- Initial release with `Add-Exception`, `Remove-Exception`, `Get-Dataset`, and `Filter-Exceptions` functions.
 
 ---
 
-## Adding an Exception
-
-### Important Rules:
-
-- No exceptions can be added without **SecArch** or **ActionPlan**. At least one is mandatory for each exception.
-- Use `SecArch` for long-term, approved exceptions and `ActionPlan` for temporary exceptions (with an expiration date).
-
-### To Add an Exception:
-
-- **SPN Object ID Exception Example**:
-
-    ```powershell
-    Add-Exception -spnObjectID "SPN1234" -azScopeType "resourceGroup" -role "Owner" -SecArch "SEC123"
-    ```
-
-    This adds an exception granting the SPN `"SPN1234"` the `Owner` role across all **resourceGroups**, with approval from `"SEC123"`.
-
-- **SPN Name Like Exception Example**:
-
-    ```powershell
-    Add-Exception -spnNameLike "*exampleApp*" -azScopeType "managementGroup" -role "Contributor" -spnEonid "EON123" -tenant "prodten" -ActionPlan "AP123" -expiration_date "12/31/2024"
-    ```
-
-    This adds an exception for any SPN that matches `"*exampleApp*"`, granting it the `Contributor` role on **managementGroups**. It requires **ActionPlan** `"AP123"` and will expire on **12/31/2024**.
-
-### Preventing Duplicate Exceptions:
-
-The `Add-Exception` function prevents adding exact duplicate exceptions. If an identical exception already exists, it will not be added again.
-
----
-
-## Daily Filtering Process (Automated)
-
-**Note:** The `Filter-Exceptions` function is scheduled to run daily on an automated schedule. You do **not** need to manually run it. This function will automatically filter SPNs from the audit dataset based on the exceptions added.
-
----
-
-## Checking for Expired Action Plans
-
-If an exception uses **ActionPlan** and has an expiration date, be aware that the filter will **not** apply it if the expiration date has passed. Make sure to renew the **ActionPlan** if necessary.
-
----
-
-## Troubleshooting
-
-- If you encounter any issues, ensure the files are unblocked by re-running:
-
-    ```powershell
-    Get-ChildItem -Path "\\your-remote-share-path" -Recurse | Unblock-File
-    ```
-
-- Ensure you are working on the correct **exceptions.json** path for adding new exceptions.
-
----
-
-## Final Notes
-
-- Always make sure you are following approval procedures (either **SecArch** or **ActionPlan**) before adding any exception.
-- The filtering function will run automatically each day; you only need to manage adding new exceptions.
-- If you have questions, please reach out to Brian upon his return.
-
+This README provides a structured guide for using the `ExceptionManager` module effectively. Happy exception managing!
