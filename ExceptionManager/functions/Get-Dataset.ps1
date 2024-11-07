@@ -3,26 +3,26 @@
     Loads the dataset from a PowerShell object or the newest file based on a wildcard pattern in the dataset path.
 
 .DESCRIPTION
-    This function accepts either a PowerShell object (array of objects) or a CSV file path. If a file path is 
-    provided, it will load the newest CSV file in the specified folder matching the given wildcard pattern 
-    (with a date suffix) and load it into memory.
+    This function accepts either a PowerShell object (array of objects) or a directory with a filename pattern. If a directory path is 
+    provided, it will load the newest CSV file in the specified folder matching the given filename pattern 
+    (e.g., with a date suffix in the filename) and load it into memory.
 
 .PARAMETER datasetObject
     Optional parameter. A PowerShell object (array of objects) representing the dataset. If provided, the object will be returned directly.
 
 .PARAMETER datasetDir
-    Optional parameter. The directory where the dataset files are stored. If no datasetObject is passed, this must be provided.
+    Optional parameter. The directory where the dataset files are stored. Required if no datasetObject is passed.
 
 .PARAMETER filenamePattern
     Optional parameter. The base filename pattern for the dataset files (e.g., "filename_"). The function will search 
-    for files that match this pattern followed by a date in MM_DD_YY format, and return the latest file based on modification time.
+    for files that match this pattern followed by any additional text, often a date or timestamp, and return the latest file based on modification time.
 
 .RETURNS
     The loaded dataset as an array of objects or a CSV file.
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.0.0
+    Version: 1.0.1
     The function ensures that the most recent dataset file is used if datasetObject is not provided.
 
 .EXAMPLE
@@ -52,6 +52,7 @@ function Get-Dataset {
             return $datasetObject
         }
 
+        # Validate datasetDir if no datasetObject is provided
         if (-not $datasetDir) {
             throw "Dataset directory must be provided if no datasetObject is passed."
         }
@@ -61,6 +62,7 @@ function Get-Dataset {
         }
 
         # Get the latest dataset file based on the filename pattern
+        Write-Verbose "Searching for files in $datasetDir with pattern '$filenamePattern*.csv'"
         $files = Get-ChildItem -Path $datasetDir -Filter "$filenamePattern*.csv" | Sort-Object LastWriteTime -Descending
 
         if (-not $files) {
@@ -68,6 +70,7 @@ function Get-Dataset {
         }
 
         $latestFile = $files[0]
+        Write-Verbose "Loading dataset from the most recent file: $($latestFile.Name)"
 
         # Load the dataset from the latest CSV file
         $dataset = Import-Csv -Path $latestFile.FullName
