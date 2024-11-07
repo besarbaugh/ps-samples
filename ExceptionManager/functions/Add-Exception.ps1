@@ -18,6 +18,7 @@ function Add-Exception {
     )
 
     try {
+        # Load configuration settings
         $configPath = ".\config.json"
         if (-not (Test-Path -Path $configPath)) {
             throw "config.json not found."
@@ -31,45 +32,59 @@ function Add-Exception {
             $dataset = Import-Csv -Path $datasetPath
         }
 
-        # Determine group based on SecArch or ActionPlan
+        # Determine which group to add the exception to
         if (-not $SecArch -and -not $ActionPlan) {
             throw "Either SecArch or ActionPlan must be provided."
         }
         if ($ActionPlan -and -not $expiration_date) {
             throw "An expiration date is required if using ActionPlan."
         }
+        $group = if ($SecArch) { "SecArchExceptions" } else { "ActionPlanExceptions" }
 
-        # Initialize the exception object
+        # Initialize the exception object excluding date fields
         $exception = @{
             spn_eonid = $spnEonid
             az_scope_type = $azScopeType
             role = $role
-            date_added = (Get-Date).ToString('MM/dd/yyyy')
         }
-
         if ($spnObjectID) { $exception.spnObjectID = $spnObjectID }
         if ($spnNameLike) { $exception.spnNameLike = $spnNameLike; $exception.tenant = $tenant }
         if ($azObjectScopeID) { $exception.azObjectScopeID = $azObjectScopeID }
         if ($azObjectNameLike) { $exception.azObjectNameLike = $azObjectNameLike }
         if ($SecArch) { $exception.SecArch = $SecArch }
-        if ($ActionPlan) { $exception.ActionPlan = $ActionPlan; $exception.expiration_date = $expiration_date }
+        if ($ActionPlan) { $exception.ActionPlan = $ActionPlan }
 
-        # Load the current exceptions JSON structure
+        # Load existing exceptions
         $exceptions = if (Test-Path -Path $exceptionsPath) {
             Get-Content -Raw -Path $exceptionsPath | ConvertFrom-Json
         } else {
             @{ SecArchExceptions = @(); ActionPlanExceptions = @() }
         }
 
-        # Determine which group to add the exception to
-        $group = if ($SecArch) { "SecArchExceptions" } else { "ActionPlanExceptions" }
-
-        # Check for duplicates in the specific group
-        if ($exceptions.$group -contains $exception) {
-            throw "An identical exception already exists in $group."
+        # Duplicate check excluding date fields
+        $isDuplicate = $exceptions.$group | Where-Object {
+            ($_ | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name }) -ne 'date_added' -and
+            ($_ | Get-Member -MemberType NoteProperty | ForEach-Object { $_.Name }) -ne 'expiration_date' -and
+            $_.spn_eonid -eq $exception.spn_eonid -and
+            $_.az_scope_type -eq $exception.az_scope_type -and
+            $_.role -eq $exception.role -and
+            ($_.spnObjectID -eq $exception.spnObjectID -or $_.spnNameLike -eq $exception.spnNameLike) -and
+            $_.tenant -eq $exception.tenant -and
+            $_.azObjectScopeID -eq $exception.azObjectScopeID -and
+            $_.azObjectNameLike -eq $exception.azObjectNameLike -and
+            $_.SecArch -eq $exception.SecArch -and
+            $_.ActionPlan -eq $exception.ActionPlan
         }
 
-        # Add the new exception to the appropriate group
+        if ($isDuplicate) {
+            throw "An identical exception already exists in $group (excluding date fields)."
+        }
+
+        # Add the new exception with date fields
+        $exception.date_added = (Get-Date).ToString('MM/dd/yyyy')
+        if ($ActionPlan) { $exception.expiration_date = $expiration_date }
+
+        # Add to the appropriate group and save
         $exceptions.$group += $exception
         $exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $exceptionsPath
 
