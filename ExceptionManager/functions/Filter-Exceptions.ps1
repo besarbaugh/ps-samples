@@ -46,10 +46,16 @@ function Filter-Exceptions {
         # Initialize an array to hold matching exceptions if outputExceptions is set
         $matchingItems = @()
 
-        # Iterate through each exception to find matching entries in the dataset
-        foreach ($exception in $allExceptions) {
-            $dataset = $dataset | ForEach-Object {
-                $lineItem = $_
+        # Iterate through each line item and apply all exceptions to check for matches
+        foreach ($lineItem in $dataset) {
+            # Create arrays to hold multiple matches if any
+            $matchedSecArch = @()
+            $matchedActionPlan = @()
+            $matchedExpirationDate = @()
+            $matchedDateAdded = @()
+
+            # Check each exception to see if it matches the current line item
+            foreach ($exception in $allExceptions) {
                 $spnMatch = $false
                 $azObjectMatch = $false
                 $tenantMatch = $true  # Default to true, modify only if tenant matching is required
@@ -72,30 +78,31 @@ function Filter-Exceptions {
                     $azObjectMatch = ($lineItem.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # If outputExceptions switch is set, capture matching items
-                if ($outputExceptions) {
-                    if ($spnMatch -and $azObjectMatch -and $tenantMatch -and
-                        ($lineItem.PrivRole -eq $exception.role) -and
-                        ($lineItem.ObjectType -eq $exception.az_scope_type)) {
-                        
-                        # Create a copy of the line item and add exception-specific fields
-                        $matchedItem = $lineItem | Select-Object *
-                        $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $exception.SecArch -Force
-                        $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $exception.ActionPlan -Force
-                        $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $exception.expiration_date -Force
-                        $matchedItem | Add-Member -MemberType NoteProperty -Name "date_added" -Value $exception.date_added -Force
-                        
-                        $matchingItems += $matchedItem
-                    }
-                    $lineItem  # Passes the item through to the next iteration
-                } else {
-                    # Otherwise, remove matching items from the dataset
-                    if (!($spnMatch -and $azObjectMatch -and $tenantMatch -and
-                          ($lineItem.PrivRole -eq $exception.role) -and
-                          ($lineItem.ObjectType -eq $exception.az_scope_type))) {
-                        $lineItem  # Include non-matching items in output
-                    }
+                # If all criteria match, add the exception details to arrays
+                if ($spnMatch -and $azObjectMatch -and $tenantMatch -and
+                    ($lineItem.PrivRole -eq $exception.role) -and
+                    ($lineItem.ObjectType -eq $exception.az_scope_type)) {
+
+                    # Append matched exception details to the respective arrays
+                    $matchedSecArch += $exception.SecArch
+                    $matchedActionPlan += $exception.ActionPlan
+                    $matchedExpirationDate += $exception.expiration_date
+                    $matchedDateAdded += $exception.date_added
                 }
+            }
+
+            # If matches were found and outputExceptions is set, add line item with details
+            if ($outputExceptions -and $matchedSecArch.Count -gt 0) {
+                # Clone the line item to add exception details
+                $matchedItem = $lineItem | Select-Object *
+
+                # Add arrays as properties for multiple match details
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $matchedSecArch -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $matchedActionPlan -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $matchedExpirationDate -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "date_added" -Value $matchedDateAdded -Force
+
+                $matchingItems += $matchedItem
             }
         }
 
@@ -108,12 +115,16 @@ function Filter-Exceptions {
                 return $matchingItems
             }
         } else {
-            # Otherwise, output the filtered dataset
+            # Filtered (non-excepted) dataset if outputExceptions is not set
+            $filteredDataset = $dataset | Where-Object {
+                # Filter out items that matched any exception
+                $matchingItems -notcontains $_
+            }
             if ($outputAsCsv) {
-                $dataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
+                $filteredDataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
                 Write-Host "Filtered results saved to: $outputCsvPath"
             } else {
-                return $dataset
+                return $filteredDataset
             }
         }
 
