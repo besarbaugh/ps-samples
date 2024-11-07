@@ -1,79 +1,42 @@
-# Define the path to your CSV file
+# Path to your input CSV file
 $csvPath = ".\exceptionout.csv"
 
-# Check if the CSV file exists
-if (-not (Test-Path -Path $csvPath)) {
-    Write-Host "CSV file not found at path: $csvPath"
-    return
-}
-
-# Import the CSV
+# Import the CSV file
 $data = Import-Csv -Path $csvPath
 
-# Create a hashtable to store unique SecArch and ActionPlan entries with associated EONIDs
-$result = @{
-    SecArch = @{}
-    ActionPlan = @{}
-}
+# Initialize empty hashtables for SecArch and ActionPlan entries
+$secArchEntries = @{}
+$actionPlanEntries = @{}
 
-# Process each row in the CSV
+# Loop through each row in the CSV
 foreach ($row in $data) {
-    # Process SecArch values
+    # Handle SecArch entries
     if ($row.SecArch -and $row.SecArch -ne "N/A") {
-        if (-not $result.SecArch.ContainsKey($row.SecArch)) {
-            $result.SecArch[$row.SecArch] = @()  # Initialize an empty array for EONIDs
+        if (-not $secArchEntries.ContainsKey($row.SecArch)) {
+            $secArchEntries[$row.SecArch] = @()
         }
-        # Add unique EONID to the SecArch entry
-        if (-not $result.SecArch[$row.SecArch].Contains($row.AppEONID)) {
-            $result.SecArch[$row.SecArch] += $row.AppEONID
-        }
+        $secArchEntries[$row.SecArch] += $row.AppEONID
     }
 
-    # Process ActionPlan values
+    # Handle ActionPlan entries
     if ($row.ActionPlan -and $row.ActionPlan -ne "N/A") {
-        if (-not $result.ActionPlan.ContainsKey($row.ActionPlan)) {
-            $result.ActionPlan[$row.ActionPlan] = @()  # Initialize an empty array for EONIDs
+        if (-not $actionPlanEntries.ContainsKey($row.ActionPlan)) {
+            $actionPlanEntries[$row.ActionPlan] = @()
         }
-        # Add unique EONID to the ActionPlan entry
-        if (-not $result.ActionPlan[$row.ActionPlan].Contains($row.AppEONID)) {
-            $result.ActionPlan[$row.ActionPlan] += $row.AppEONID
-        }
+        $actionPlanEntries[$row.ActionPlan] += $row.AppEONID
     }
 }
 
-# Display the results in a readable format
+# Print results for SecArch entries
 Write-Host "SecArch and associated EONIDs:"
-foreach ($secArch in $result.SecArch.Keys) {
-    Write-Host "$secArch:`t$($result.SecArch[$secArch] -join ', ')"
+foreach ($secArch in $secArchEntries.Keys) {
+    $uniqueEonIds = ($secArchEntries[$secArch] | Sort-Object -Unique) -join ', '
+    Write-Host "$secArch:`t$uniqueEonIds"
 }
 
+# Print results for ActionPlan entries
 Write-Host "`nActionPlan and associated EONIDs:"
-foreach ($actionPlan in $result.ActionPlan.Keys) {
-    Write-Host "$actionPlan:`t$($result.ActionPlan[$actionPlan] -join ', ')"
+foreach ($actionPlan in $actionPlanEntries.Keys) {
+    $uniqueEonIds = ($actionPlanEntries[$actionPlan] | Sort-Object -Unique) -join ', '
+    Write-Host "$actionPlan:`t$uniqueEonIds"
 }
-
-# Optional: Export results to a new CSV file with SecArch, ActionPlan, and associated EONIDs
-
-# Prepare SecArch Data for export
-$secArchOutput = foreach ($secArch in $result.SecArch.Keys) {
-    [pscustomobject]@{
-        Type       = "SecArch"
-        Identifier = $secArch
-        EONIDs     = $result.SecArch[$secArch] -join ', '
-    }
-}
-
-# Prepare ActionPlan Data for export
-$actionPlanOutput = foreach ($actionPlan in $result.ActionPlan.Keys) {
-    [pscustomobject]@{
-        Type       = "ActionPlan"
-        Identifier = $actionPlan
-        EONIDs     = $result.ActionPlan[$actionPlan] -join ', '
-    }
-}
-
-# Combine both results and export
-$combinedOutput = $secArchOutput + $actionPlanOutput
-$combinedOutput | Export-Csv -Path ".\unique_exceptions_with_EONIDs.csv" -NoTypeInformation -Force
-
-Write-Host "Export completed: unique_exceptions_with_EONIDs.csv"
