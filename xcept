@@ -9,16 +9,16 @@ if (-not (Test-Path -Path $newExceptionsPath)) {
 
 $exceptions = Get-Content -Path $newExceptionsPath | ConvertFrom-Json
 
-# Process each exception in SecArchExceptions and ActionPlanExceptions, adding a unique GUID
+# Process each exception in SecArchExceptions and ActionPlanExceptions, adding a unique GUID if missing
 foreach ($exception in $exceptions.SecArchExceptions) {
     if (-not $exception.PSObject.Properties["uniqueID"]) {
-        $exception.uniqueID = (New-Guid).Guid
+        $exception | Add-Member -MemberType NoteProperty -Name "uniqueID" -Value (New-Guid).Guid
     }
 }
 
 foreach ($exception in $exceptions.ActionPlanExceptions) {
     if (-not $exception.PSObject.Properties["uniqueID"]) {
-        $exception.uniqueID = (New-Guid).Guid
+        $exception | Add-Member -MemberType NoteProperty -Name "uniqueID" -Value (New-Guid).Guid
     }
 }
 
