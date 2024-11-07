@@ -1,28 +1,42 @@
-# Define the path for the reorganized exceptions JSON file
+# Define paths for the old and new exceptions JSON files
+$exceptionsPath = ".\exceptions.json"
 $newExceptionsPath = ".\exceptions_reorganized.json"
 
-# Load the existing exceptions file
-if (-not (Test-Path -Path $newExceptionsPath)) {
-    Write-Host "Error: The exceptions_reorganized.json file was not found at $newExceptionsPath"
+# Load the existing exceptions.json
+if (-not (Test-Path -Path $exceptionsPath)) {
+    Write-Host "Error: The exceptions.json file was not found at $exceptionsPath"
     exit
 }
 
-$exceptions = Get-Content -Path $newExceptionsPath | ConvertFrom-Json
+$exceptions = Get-Content -Path $exceptionsPath | ConvertFrom-Json
 
-# Process each exception in SecArchExceptions and ActionPlanExceptions, adding a unique GUID if missing
-foreach ($exception in $exceptions.SecArchExceptions) {
-    if (-not $exception.PSObject.Properties["uniqueID"]) {
-        $exception | Add-Member -MemberType NoteProperty -Name "uniqueID" -Value (New-Guid).Guid
+# Initialize the new JSON structure with separate groups
+$newExceptions = @{
+    SecArchExceptions = @()
+    ActionPlanExceptions = @()
+}
+
+# Process each exception entry
+foreach ($exception in $exceptions) {
+    # Add a unique GUID to each exception using Add-Member
+    $exception | Add-Member -MemberType NoteProperty -Name "uniqueID" -Value ([guid]::NewGuid().Guid) -Force
+
+    # Check if the exception is a SecArch exception
+    if ($exception.SecArch) {
+        # Add to SecArchExceptions group
+        $newExceptions.SecArchExceptions += $exception
+    }
+    # Check if the exception is an ActionPlan exception
+    elseif ($exception.ActionPlan) {
+        # Add to ActionPlanExceptions group
+        $newExceptions.ActionPlanExceptions += $exception
+    }
+    else {
+        Write-Host "Warning: Exception does not have SecArch or ActionPlan. Skipping."
     }
 }
 
-foreach ($exception in $exceptions.ActionPlanExceptions) {
-    if (-not $exception.PSObject.Properties["uniqueID"]) {
-        $exception | Add-Member -MemberType NoteProperty -Name "uniqueID" -Value (New-Guid).Guid
-    }
-}
+# Convert the new structure to JSON and save it
+$newExceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $newExceptionsPath
 
-# Save the updated structure back to the JSON file
-$exceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $newExceptionsPath
-
-Write-Host "Unique GUIDs added to each exception in $newExceptionsPath"
+Write-Host "Conversion completed. New file saved at $newExceptionsPath"
