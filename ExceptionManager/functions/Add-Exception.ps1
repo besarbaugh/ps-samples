@@ -61,7 +61,7 @@ function Add-Exception {
             @{ SecArchExceptions = @(); ActionPlanExceptions = @() }
         }
 
-        # Duplicate check excluding date fields
+        # Duplicate check excluding uniqueID and date fields
         $isDuplicate = $exceptions.$group | Where-Object {
             $_.spn_eonid -eq $exception.spn_eonid -and
             $_.az_scope_type -eq $exception.az_scope_type -and
@@ -75,7 +75,7 @@ function Add-Exception {
         }
 
         if ($isDuplicate) {
-            throw "An identical exception already exists in $group (excluding date fields)."
+            throw "An identical exception already exists in $group (excluding uniqueID and date fields)."
         }
 
         # Add date fields and save
