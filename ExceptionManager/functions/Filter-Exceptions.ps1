@@ -53,7 +53,6 @@ function Filter-Exceptions {
             $matchedSecArch = @()
             $matchedActionPlan = @()
             $matchedExpirationDate = @()
-            $matchedDateAdded = @()
             $isMatched = $false
 
             foreach ($exception in $allExceptions) {
@@ -88,10 +87,9 @@ function Filter-Exceptions {
                     $isMatched = $true
 
                     # Append matched exception details to the respective arrays
-                    $matchedSecArch += $exception.SecArch
-                    $matchedActionPlan += $exception.ActionPlan
-                    $matchedExpirationDate += $exception.expiration_date
-                    $matchedDateAdded += $exception.date_added
+                    if ($exception.SecArch) { $matchedSecArch += $exception.SecArch }
+                    if ($exception.ActionPlan) { $matchedActionPlan += $exception.ActionPlan }
+                    if ($exception.expiration_date) { $matchedExpirationDate += $exception.expiration_date }
                 }
             }
 
@@ -99,10 +97,13 @@ function Filter-Exceptions {
             if ($isMatched) {
                 # Clone the line item to add exception details if matched
                 $matchedItem = $lineItem | Select-Object *
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $matchedSecArch -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $matchedActionPlan -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $matchedExpirationDate -Force
-                $matchedItem | Add-Member -MemberType NoteProperty -Name "date_added" -Value $matchedDateAdded -Force
+
+                # Convert arrays to comma-separated strings, or set to "NA" if empty
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value ($matchedSecArch -join ", " -replace "^$", "NA") -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value ($matchedActionPlan -join ", " -replace "^$", "NA") -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value ($matchedExpirationDate -join ", " -replace "^$", "NA") -Force
+
+                # Add to matching items array
                 $matchingItems += $matchedItem
             } else {
                 # Add non-matching items directly to nonMatchingItems array
