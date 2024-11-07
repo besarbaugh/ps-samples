@@ -1,3 +1,76 @@
+<#
+.SYNOPSIS
+    Adds a new exception to the exceptions.json file after validating the schema and preventing duplicates.
+
+.DESCRIPTION
+    This function adds a new exception to the exceptions.json file after validating its schema. It supports both 
+    spnObjectID-based exceptions and spnNameLike patterns, ensuring mutual exclusivity. It also validates the 
+    tenant and spnEonid when adding spnNameLike patterns. Wildcard lookups for AppDisplayName and AzureObjectName 
+    are supported. Additionally, the function prevents exact duplicate exceptions from being added to the exceptions.json file.
+
+.PARAMETER spnEonid
+    The EonID for the SPN. This is required for all exceptions.
+
+.PARAMETER spnObjectID
+    The SPN Object ID for a single SPN-based exception. This is mutually exclusive with spnNameLike.
+
+.PARAMETER spnNameLike
+    A wildcard pattern for a name-like SPN exception. This is mutually exclusive with spnObjectID. Requires spnEonid and tenant.
+
+.PARAMETER tenant
+    The tenant identifier. Accepted values are: "prodten", "qaten", "devten". This is required if spnNameLike is used.
+
+.PARAMETER azScopeType
+    The type of Azure scope (managementGroup, resourceGroup, subscription). Mandatory for all exceptions.
+
+.PARAMETER role
+    The role being assigned to the SPN (Owner, Contributor, User Access Administrator, or AppDevContributor). Only one role per exception.
+
+.PARAMETER azObjectScopeID
+    The ID of the Azure object (e.g., resourceGroup, subscription, managementGroup) for specific object exceptions. Mutually exclusive with azObjectNameLike.
+
+.PARAMETER azObjectNameLike
+    A wildcard pattern for an Azure object name. Mutually exclusive with azObjectScopeID.
+
+.PARAMETER SecArch
+    The SecArch approval identifier. Automatically includes a 'date added'. Either SecArch or ActionPlan is required.
+
+.PARAMETER ActionPlan
+    The ActionPlan identifier. Automatically includes a 'date added' and requires an expiration date. Either SecArch or ActionPlan is required.
+
+.PARAMETER expiration_date
+    The expiration date for the ActionPlan (required if ActionPlan is provided). Format: mm/dd/yyyy.
+
+.PARAMETER exceptionsPath
+    The file path for the exceptions.json file. Defaults to the path specified in config.json.
+
+.PARAMETER datasetPath
+    The file path for the dataset (CSV). Defaults to the path specified in config.json.
+
+.PARAMETER removalCount
+    Optional switch to output the count of how many items would be removed from the dataset based on this new exception.
+
+.EXAMPLE
+    Add-Exception -spnObjectID "SPN1234" -spnEonid "EON123" -azScopeType "resourceGroup" -role "Owner"
+    
+    Adds an exception for a specific SPN object ID, granting Owner role on all resourceGroups. The tenant is derived from spnEonid.
+
+.EXAMPLE
+    Add-Exception -spnNameLike "*sampleApp*" -spnEonid "EON123" -tenant "prodten" -azScopeType "managementGroup" -role "Contributor"
+    
+    Adds an exception for SPNs with a name-like pattern, granting Contributor role on any managementGroup, filtered by spnEonid.
+
+.EXAMPLE
+    Add-Exception -spnObjectID "SPN5678" -spnEonid "EON456" -azScopeType "subscription" -role "User Access Administrator" -SecArch "Sec123"
+    
+    Adds an exception for a specific SPN object ID, granting User Access Administrator role on all subscriptions with SecArch approval.
+
+.NOTES
+    Author: Brian Sarbaugh
+    Version: 1.0.5
+    This function prevents the addition of exact duplicate exceptions and validates the schema before adding. It also supports counting how many existing entries in the dataset would be removed by this exception.
+#>
+
 function Add-Exception {
     [CmdletBinding(DefaultParameterSetName = 'spnObjectIDSet')]
     param(
