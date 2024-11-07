@@ -1,42 +1,72 @@
-# Define paths for the old and new exceptions JSON files
-$exceptionsPath = ".\exceptions.json"
-$newExceptionsPath = ".\exceptions_reorganized.json"
+# Define the path to your CSV file
+$csvPath = ".\exceptionout.csv"
 
-# Load the existing exceptions.json
-if (-not (Test-Path -Path $exceptionsPath)) {
-    Write-Host "Error: The exceptions.json file was not found at $exceptionsPath"
-    exit
+# Import the CSV
+$data = Import-Csv -Path $csvPath
+
+# Create a hashtable to store unique SecArch and ActionPlan entries with associated EONIDs
+$result = [ordered]@{
+    SecArch = @{}
+    ActionPlan = @{}
 }
 
-$exceptions = Get-Content -Path $exceptionsPath | ConvertFrom-Json
-
-# Initialize the new JSON structure with separate groups
-$newExceptions = @{
-    SecArchExceptions = @()
-    ActionPlanExceptions = @()
-}
-
-# Process each exception entry
-foreach ($exception in $exceptions) {
-    # Add a unique GUID to each exception using Add-Member
-    $exception | Add-Member -MemberType NoteProperty -Name "uniqueID" -Value ([guid]::NewGuid().Guid) -Force
-
-    # Check if the exception is a SecArch exception
-    if ($exception.SecArch) {
-        # Add to SecArchExceptions group
-        $newExceptions.SecArchExceptions += $exception
+# Process each row in the CSV
+foreach ($row in $data) {
+    # If SecArch exists and is not "N/A", add it to the result
+    if ($row.SecArch -and $row.SecArch -ne "N/A") {
+        if (-not $result.SecArch.ContainsKey($row.SecArch)) {
+            $result.SecArch[$row.SecArch] = @()  # Initialize an empty array for EONIDs
+        }
+        # Add unique EONID to the SecArch entry
+        if (-not $result.SecArch[$row.SecArch].Contains($row.AppEONID)) {
+            $result.SecArch[$row.SecArch] += $row.AppEONID
+        }
     }
-    # Check if the exception is an ActionPlan exception
-    elseif ($exception.ActionPlan) {
-        # Add to ActionPlanExceptions group
-        $newExceptions.ActionPlanExceptions += $exception
-    }
-    else {
-        Write-Host "Warning: Exception does not have SecArch or ActionPlan. Skipping."
+
+    # If ActionPlan exists and is not "N/A", add it to the result
+    if ($row.ActionPlan -and $row.ActionPlan -ne "N/A") {
+        if (-not $result.ActionPlan.ContainsKey($row.ActionPlan)) {
+            $result.ActionPlan[$row.ActionPlan] = @()  # Initialize an empty array for EONIDs
+        }
+        # Add unique EONID to the ActionPlan entry
+        if (-not $result.ActionPlan[$row.ActionPlan].Contains($row.AppEONID)) {
+            $result.ActionPlan[$row.ActionPlan] += $row.AppEONID
+        }
     }
 }
 
-# Convert the new structure to JSON and save it
-$newExceptions | ConvertTo-Json -Depth 10 | Set-Content -Path $newExceptionsPath
+# Display the results in a readable format
+Write-Host "SecArch and associated EONIDs:"
+foreach ($secArch in $result.SecArch.Keys) {
+    Write-Host "$secArch:`t$($result.SecArch[$secArch] -join ', ')"
+}
 
-Write-Host "Conversion completed. New file saved at $newExceptionsPath"
+Write-Host "`nActionPlan and associated EONIDs:"
+foreach ($actionPlan in $result.ActionPlan.Keys) {
+    Write-Host "$actionPlan:`t$($result.ActionPlan[$actionPlan] -join ', ')"
+}
+
+# Optional: Export results to a new CSV file with SecArch, ActionPlan, and associated EONIDs
+
+# Prepare SecArch Data for export
+$secArchOutput = foreach ($secArch in $result.SecArch.Keys) {
+    [pscustomobject]@{
+        Type    = "SecArch"
+        Identifier = $secArch
+        EONIDs  = $result.SecArch[$secArch] -join ', '
+    }
+}
+
+# Prepare ActionPlan Data for export
+$actionPlanOutput = foreach ($actionPlan in $result.ActionPlan.Keys) {
+    [pscustomobject]@{
+        Type    = "ActionPlan"
+        Identifier = $actionPlan
+        EONIDs  = $result.ActionPlan[$actionPlan] -join ', '
+    }
+}
+
+# Combine both results and export
+$secArchOutput + $actionPlanOutput | Export-Csv -Path ".\unique_exceptions_with_EONIDs.csv" -NoTypeInformation
+
+Write-Host "Export completed: unique_exceptions_with_EONIDs.csv"
