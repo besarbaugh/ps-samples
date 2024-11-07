@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    Filters out entries from the dataset based on the exceptions in exceptions.json or outputs matching (excepted) entries.
+    Filters out entries from the dataset based on the exceptions in exceptions.json or a provided PSObject.
 
 .DESCRIPTION
-    This function processes the dataset (from a CSV or PowerShell object) and filters out entries that match exceptions 
-    defined in exceptions.json. The function supports specifying custom paths for the exceptions file and dataset. 
-    It can output the filtered dataset (non-matching entries) or matching (excepted) entries. It also allows optional 
-    output to CSV with additional exception information columns (SecArch, ActionPlan, expiration_date, and MatchCount).
+    This function processes the dataset (CSV or PSObject) and filters out any entries that match the exceptions 
+    defined in exceptions.json or a provided object. It includes the uniqueID (GUID) of the matched exception in the 
+    output when returning matched items. The function can return results either as a CSV or a PSObject array for 
+    further manipulation.
 
 .PARAMETER exceptionsPath
     The file path for the exceptions.json file. Defaults to the value from config.json if not provided.
@@ -15,33 +15,35 @@
     The file path for the dataset (CSV). Defaults to the value from config.json if not provided.
 
 .PARAMETER datasetObject
-    A PowerShell object (array of objects) representing the dataset. If provided, this will be used instead of the CSV file.
+    A PowerShell object (array of objects) representing the dataset. If provided, this will be used instead of the CSV.
 
 .PARAMETER outputAsCsv
-    A switch parameter indicating if the output should be written to a CSV file. If not set, the result will be returned as a PSObject.
+    A switch parameter to indicate if the output should be written to a CSV file. If this switch is not used, the result will be returned as a PSObject.
 
 .PARAMETER outputCsvPath
-    Optional. The file path to write the filtered or matching results if outputAsCsv is specified. Defaults to ".\filtered_output.csv".
+    Optional. The file path to write the filtered results if outputAsCsv is used. Defaults to filtered_output.csv.
 
 .PARAMETER outputExceptions
-    A switch parameter to indicate if the output should include entries that match (excepted items) rather than filtered entries (non-excepted items).
+    If set, the function outputs the dataset items that match exceptions (i.e., items that are excepted).
+
+.RETURNS
+    Returns a filtered dataset, with additional fields indicating if a line matches an exception. If outputExceptions is used,
+    returns items that match exceptions, otherwise returns items that do not match any exception.
 
 .EXAMPLE
-    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv" -outputAsCsv
+    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv" -outputAsCsv -outputExceptions
     
-    Filters the dataset based on exceptions and outputs non-matching entries as a CSV file.
+    Filters the dataset based on exceptions and outputs matched results to a CSV file.
 
 .EXAMPLE
-    Filter-Exceptions -datasetObject $dataset -exceptionsPath ".\exceptions.json" -outputExceptions
+    Filter-Exceptions -datasetObject $dataset -exceptionsPath ".\exceptions.json"
     
-    Filters the provided dataset object based on exceptions and returns only the matching (excepted) entries as a PSObject.
+    Filters the provided dataset object based on exceptions and returns the non-matching results as a PSObject array.
 
 .NOTES
     Author: Brian Sarbaugh
-    Version: 1.1.1
-    This function filters the dataset according to the exceptions defined in exceptions.json or a provided object, and outputs the result 
-    in either PSObject or CSV format. Matching entries will include columns for SecArch, ActionPlan, expiration_date, and MatchCount to 
-    provide details of the exceptions.
+    Version: 1.2.0
+    Includes the uniqueID of each matched exception in the output.
 #>
 
 function Filter-Exceptions {
@@ -95,11 +97,12 @@ function Filter-Exceptions {
 
         # Iterate through each line item and check against each exception
         foreach ($lineItem in $dataset) {
-            # Initialize properties with "NA" as default values
+            # Initialize default values
             $secArch = "NA"
             $actionPlan = "NA"
             $expirationDate = "NA"
             $matchCount = 0
+            $matchedUniqueID = "NA"
 
             foreach ($exception in $allExceptions) {
                 $spnMatch = $false
@@ -129,17 +132,16 @@ function Filter-Exceptions {
                     ($lineItem.ObjectType -eq $exception.azScopeType) -and
                     ($lineItem.AppEONID -eq $exception.spnEonid)) {
                     
-                    # Increment match count
+                    # Increment match count and store matched details
                     $matchCount++
-
-                    # Only populate exception fields on the first match
+                    $matchedUniqueID = $exception.uniqueID
                     if ($matchCount -eq 1) {
+                        # Capture exception details based on type
                         if ($exception.SecArch) {
                             $secArch = $exception.SecArch
                             $actionPlan = "NA"
                             $expirationDate = "NA"
-                        }
-                        elseif ($exception.ActionPlan) {
+                        } elseif ($exception.ActionPlan) {
                             $secArch = "NA"
                             $actionPlan = $exception.ActionPlan
                             $expirationDate = $exception.expiration_date
@@ -148,7 +150,7 @@ function Filter-Exceptions {
                 }
             }
 
-            # Add to the respective output array based on match status
+            # Process matched and non-matched items
             if ($matchCount -gt 0) {
                 # Clone the line item to add exception details if matched
                 $matchedItem = $lineItem | Select-Object *
@@ -156,6 +158,7 @@ function Filter-Exceptions {
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $actionPlan -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $expirationDate -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "MatchCount" -Value $matchCount -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "MatchedUniqueID" -Value $matchedUniqueID -Force
                 $matchingItems += $matchedItem
             } else {
                 # Add non-matching items directly to nonMatchingItems array
@@ -163,7 +166,7 @@ function Filter-Exceptions {
             }
         }
 
-        # Determine which result set to output based on outputExceptions
+        # Output matched or unmatched items based on outputExceptions switch
         if ($outputExceptions) {
             if ($outputAsCsv) {
                 $matchingItems | Export-Csv -Path $outputCsvPath -NoTypeInformation
