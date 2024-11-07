@@ -1,3 +1,49 @@
+<#
+.SYNOPSIS
+    Filters out entries from the dataset based on the exceptions in exceptions.json or outputs matching (excepted) entries.
+
+.DESCRIPTION
+    This function processes the dataset (from a CSV or PowerShell object) and filters out entries that match exceptions 
+    defined in exceptions.json. The function supports specifying custom paths for the exceptions file and dataset. 
+    It can output the filtered dataset (non-matching entries) or matching (excepted) entries. It also allows optional 
+    output to CSV with additional exception information columns (SecArch, ActionPlan, expiration_date, and MatchCount).
+
+.PARAMETER exceptionsPath
+    The file path for the exceptions.json file. Defaults to the value from config.json if not provided.
+
+.PARAMETER datasetPath
+    The file path for the dataset (CSV). Defaults to the value from config.json if not provided.
+
+.PARAMETER datasetObject
+    A PowerShell object (array of objects) representing the dataset. If provided, this will be used instead of the CSV file.
+
+.PARAMETER outputAsCsv
+    A switch parameter indicating if the output should be written to a CSV file. If not set, the result will be returned as a PSObject.
+
+.PARAMETER outputCsvPath
+    Optional. The file path to write the filtered or matching results if outputAsCsv is specified. Defaults to ".\filtered_output.csv".
+
+.PARAMETER outputExceptions
+    A switch parameter to indicate if the output should include entries that match (excepted items) rather than filtered entries (non-excepted items).
+
+.EXAMPLE
+    Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\dataset.csv" -outputAsCsv
+    
+    Filters the dataset based on exceptions and outputs non-matching entries as a CSV file.
+
+.EXAMPLE
+    Filter-Exceptions -datasetObject $dataset -exceptionsPath ".\exceptions.json" -outputExceptions
+    
+    Filters the provided dataset object based on exceptions and returns only the matching (excepted) entries as a PSObject.
+
+.NOTES
+    Author: Brian Sarbaugh
+    Version: 1.1.1
+    This function filters the dataset according to the exceptions defined in exceptions.json or a provided object, and outputs the result 
+    in either PSObject or CSV format. Matching entries will include columns for SecArch, ActionPlan, expiration_date, and MatchCount to 
+    provide details of the exceptions.
+#>
+
 function Filter-Exceptions {
     [CmdletBinding()]
     param (
