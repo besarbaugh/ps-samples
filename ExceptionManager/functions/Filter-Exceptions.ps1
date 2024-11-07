@@ -53,7 +53,7 @@ function Filter-Exceptions {
             $secArch = "NA"
             $actionPlan = "NA"
             $expirationDate = "NA"
-            $isMatched = $false
+            $matchCount = 0
 
             foreach ($exception in $allExceptions) {
                 $spnMatch = $false
@@ -83,31 +83,33 @@ function Filter-Exceptions {
                     ($lineItem.ObjectType -eq $exception.azScopeType) -and
                     ($lineItem.AppEONID -eq $exception.spnEonid)) {
                     
-                    # Mark as matched
-                    $isMatched = $true
+                    # Increment match count
+                    $matchCount++
 
-                    # Set values based on whether the exception is SecArch or ActionPlan
-                    if ($exception.SecArch) {
-                        $secArch = $exception.SecArch
-                        $actionPlan = "NA"
-                        $expirationDate = "NA"
+                    # Only populate exception fields on the first match
+                    if ($matchCount -eq 1) {
+                        if ($exception.SecArch) {
+                            $secArch = $exception.SecArch
+                            $actionPlan = "NA"
+                            $expirationDate = "NA"
+                        }
+                        elseif ($exception.ActionPlan) {
+                            $secArch = "NA"
+                            $actionPlan = $exception.ActionPlan
+                            $expirationDate = $exception.expiration_date
+                        }
                     }
-                    elseif ($exception.ActionPlan) {
-                        $secArch = "NA"
-                        $actionPlan = $exception.ActionPlan
-                        $expirationDate = $exception.expiration_date
-                    }
-                    break  # Exit the loop once a match is found
                 }
             }
 
             # Add to the respective output array based on match status
-            if ($isMatched) {
+            if ($matchCount -gt 0) {
                 # Clone the line item to add exception details if matched
                 $matchedItem = $lineItem | Select-Object *
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $secArch -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $actionPlan -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $expirationDate -Force
+                $matchedItem | Add-Member -MemberType NoteProperty -Name "MatchCount" -Value $matchCount -Force
                 $matchingItems += $matchedItem
             } else {
                 # Add non-matching items directly to nonMatchingItems array
