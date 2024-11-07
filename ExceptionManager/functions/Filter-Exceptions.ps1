@@ -43,18 +43,19 @@ function Filter-Exceptions {
         # Combine SecArchExceptions and ActionPlanExceptions for filtering
         $allExceptions = @($exceptions.SecArchExceptions + $exceptions.ActionPlanExceptions)
 
-        # Initialize an array to hold matching exceptions if outputExceptions is set
+        # Initialize arrays for matching and non-matching items
         $matchingItems = @()
+        $nonMatchingItems = @()
 
-        # Iterate through each line item and apply all exceptions to check for matches
+        # Iterate through each line item and check against each exception
         foreach ($lineItem in $dataset) {
             # Create arrays to hold multiple matches if any
             $matchedSecArch = @()
             $matchedActionPlan = @()
             $matchedExpirationDate = @()
             $matchedDateAdded = @()
+            $isMatched = $false
 
-            # Check each exception to see if it matches the current line item
             foreach ($exception in $allExceptions) {
                 $spnMatch = $false
                 $azObjectMatch = $false
@@ -62,10 +63,9 @@ function Filter-Exceptions {
 
                 # Handle SPN matching (spnObjectID vs spnNameLike)
                 if ($exception.spnObjectID) {
-                    $spnMatch = ($lineItem.AppObjectID -eq $exception.spnObjectID)
+                    $spnMatch = ($lineItem.AppObjectId -eq $exception.spnObjectID)
                 } elseif ($exception.spnNameLike) {
                     $spnMatch = ($lineItem.AppDisplayName -ilike "*$($exception.spnNameLike)*")
-                    # Apply tenant matching only if spnNameLike is used
                     $tenantMatch = ($lineItem.Tenant -eq $exception.tenant)
                 }
 
@@ -78,10 +78,14 @@ function Filter-Exceptions {
                     $azObjectMatch = ($lineItem.ObjectName -ilike "*$($exception.azObjectNameLike)*")
                 }
 
-                # If all criteria match, add the exception details to arrays
+                # Check if the line item matches the exception
                 if ($spnMatch -and $azObjectMatch -and $tenantMatch -and
                     ($lineItem.PrivRole -eq $exception.role) -and
-                    ($lineItem.ObjectType -eq $exception.az_scope_type)) {
+                    ($lineItem.ObjectType -eq $exception.azScopeType) -and
+                    ($lineItem.AppEONID -eq $exception.spnEonid)) {
+                    
+                    # Mark as matched
+                    $isMatched = $true
 
                     # Append matched exception details to the respective arrays
                     $matchedSecArch += $exception.SecArch
@@ -91,22 +95,22 @@ function Filter-Exceptions {
                 }
             }
 
-            # If matches were found and outputExceptions is set, add line item with details
-            if ($outputExceptions -and $matchedSecArch.Count -gt 0) {
-                # Clone the line item to add exception details
+            # Add to the respective output array based on match status
+            if ($isMatched) {
+                # Clone the line item to add exception details if matched
                 $matchedItem = $lineItem | Select-Object *
-
-                # Add arrays as properties for multiple match details
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "SecArch" -Value $matchedSecArch -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "ActionPlan" -Value $matchedActionPlan -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "expiration_date" -Value $matchedExpirationDate -Force
                 $matchedItem | Add-Member -MemberType NoteProperty -Name "date_added" -Value $matchedDateAdded -Force
-
                 $matchingItems += $matchedItem
+            } else {
+                # Add non-matching items directly to nonMatchingItems array
+                $nonMatchingItems += $lineItem
             }
         }
 
-        # Output matching items if outputExceptions is set
+        # Determine which result set to output based on outputExceptions
         if ($outputExceptions) {
             if ($outputAsCsv) {
                 $matchingItems | Export-Csv -Path $outputCsvPath -NoTypeInformation
@@ -115,16 +119,11 @@ function Filter-Exceptions {
                 return $matchingItems
             }
         } else {
-            # Filtered (non-excepted) dataset if outputExceptions is not set
-            $filteredDataset = $dataset | Where-Object {
-                # Filter out items that matched any exception
-                $matchingItems -notcontains $_
-            }
             if ($outputAsCsv) {
-                $filteredDataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
+                $nonMatchingItems | Export-Csv -Path $outputCsvPath -NoTypeInformation
                 Write-Host "Filtered results saved to: $outputCsvPath"
             } else {
-                return $filteredDataset
+                return $nonMatchingItems
             }
         }
 
