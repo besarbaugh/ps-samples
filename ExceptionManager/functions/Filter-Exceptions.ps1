@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
     Filters dataset based on exceptions.json:
-    - Removes entries matching SecArch exceptions.
-    - Adds ActionPlan details (`AP_Number` and `Due_Date`) as new columns.
+    - Removes rows covered by SecArch exceptions.
+    - Marks remaining rows with ActionPlan details (`AP_Number` and `Due_Date`) if applicable.
 
 .DESCRIPTION
-    - SecArch exceptions remove the entry completely.
-    - ActionPlan exceptions retain the entry and add new columns for `AP_Number` and `Due_Date`.
-    - Non-matching entries retain all original fields with blank new columns.
+    - SecArch matches take precedence: Rows are removed immediately.
+    - ActionPlan matches mark rows with `AP_Number` and `Due_Date`.
+    - Input dataset fields are preserved, and new columns are added dynamically.
 
 .PARAMETER exceptionsPath
     Path to the `exceptions.json` file.
@@ -16,10 +16,10 @@
     Path to the dataset CSV file.
 
 .PARAMETER outputAsCsv
-    If specified, outputs the filtered dataset to a CSV file.
+    Outputs the filtered dataset to a CSV file.
 
 .PARAMETER outputCsvPath
-    File path for the output CSV file.
+    Path for the output CSV file.
 
 .EXAMPLE
     Filter-Exceptions -exceptionsPath ".\exceptions.json" -datasetPath ".\violations.csv" -outputAsCsv -outputCsvPath ".\filtered_output.csv"
@@ -43,72 +43,93 @@ function Filter-Exceptions {
         if (-not (Test-Path -Path $datasetPath)) { throw "Dataset file not found." }
         $dataset = Import-Csv -Path $datasetPath
 
-        # Initialize output array
-        $filteredDataset = @()
-
+        # Step 1: Filter SecArch exceptions
+        $remainingDataset = @()
         foreach ($lineItem in $dataset) {
-            # Default AP columns to blank
-            $AP_Number = ""
-            $Due_Date = ""
-
-            $isSecArchMatched = $false
-            $isActionPlanMatched = $false
+            $isSecArch = $false
 
             foreach ($exception in $exceptions) {
-                # Match SPN and Azure object
-                $spnMatch = $false
-                if ($exception.spnObjectID) {
-                    $spnMatch = ($lineItem.AppObjectID -eq $exception.spnObjectID)
-                } elseif ($exception.spnNameLike) {
-                    $spnMatch = ($lineItem.AppDisplayName -like "*$($exception.spnNameLike)*")
-                }
+                if ($exception.SecArch) {
+                    # Matching logic for SecArch
+                    $spnMatch = $false
+                    $azObjectMatch = $false
 
-                $azObjectMatch = $false
-                if ($exception.azObjectScopeID) {
-                    $azObjectMatch = ($lineItem.AzureObjectScopeID -eq $exception.azObjectScopeID)
-                } elseif ($exception.azObjectNameLike) {
-                    $azObjectMatch = ($lineItem.ObjectName -like "*$($exception.azObjectNameLike)*")
-                }
-
-                # Full match condition
-                if ($spnMatch -and $azObjectMatch -and
-                    ($lineItem.PrivRole -eq $exception.role) -and
-                    ($lineItem.ObjectType -eq $exception.azScopeType) -and
-                    ($lineItem.AppEONID -eq $exception.spnEonid)) {
-
-                    # Check for SecArch match
-                    if ($exception.SecArch) {
-                        $isSecArchMatched = $true
-                        break
+                    if ($exception.spnObjectID) {
+                        $spnMatch = ($lineItem.AppObjectID -eq $exception.spnObjectID)
+                    } elseif ($exception.spnNameLike) {
+                        $spnMatch = ($lineItem.AppDisplayName -ilike "*$($exception.spnNameLike)*")
                     }
 
-                    # Check for ActionPlan match
-                    if ($exception.ActionPlan) {
-                        $isActionPlanMatched = $true
-                        $AP_Number = $exception.ActionPlan
-                        $Due_Date = $exception.expiration_date
+                    if ($exception.azObjectScopeID) {
+                        $azObjectMatch = ($lineItem.AzureObjectScopeID -eq $exception.azObjectScopeID)
+                    } elseif ($exception.azObjectNameLike) {
+                        $azObjectMatch = ($lineItem.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+                    }
+
+                    if ($spnMatch -and $azObjectMatch -and
+                        ($lineItem.PrivRole -eq $exception.role) -and
+                        ($lineItem.ObjectType -eq $exception.azScopeType) -and
+                        ($lineItem.AppEONID -eq $exception.spnEonid)) {
+                        $isSecArch = $true
+                        break
                     }
                 }
             }
 
-            # Skip SecArch matches
-            if ($isSecArchMatched) { continue }
-
-            # Add ActionPlan details to the current line
-            $line = $lineItem | Select-Object *  # Preserve all columns dynamically
-            $line | Add-Member -MemberType NoteProperty -Name "AP_Number" -Value $AP_Number -Force
-            $line | Add-Member -MemberType NoteProperty -Name "Due_Date" -Value $Due_Date -Force
-
-            # Append line item to filtered dataset
-            $filteredDataset += $line
+            if (-not $isSecArch) {
+                $remainingDataset += $lineItem
+            }
         }
 
-        # Output results
+        # Step 2: Process ActionPlan matches
+        $finalDataset = @()
+        foreach ($lineItem in $remainingDataset) {
+            # Default AP fields to blank
+            $AP_Number = ""
+            $Due_Date = ""
+
+            foreach ($exception in $exceptions) {
+                if ($exception.ActionPlan) {
+                    # Matching logic for ActionPlan
+                    $spnMatch = $false
+                    $azObjectMatch = $false
+
+                    if ($exception.spnObjectID) {
+                        $spnMatch = ($lineItem.AppObjectID -eq $exception.spnObjectID)
+                    } elseif ($exception.spnNameLike) {
+                        $spnMatch = ($lineItem.AppDisplayName -ilike "*$($exception.spnNameLike)*")
+                    }
+
+                    if ($exception.azObjectScopeID) {
+                        $azObjectMatch = ($lineItem.AzureObjectScopeID -eq $exception.azObjectScopeID)
+                    } elseif ($exception.azObjectNameLike) {
+                        $azObjectMatch = ($lineItem.ObjectName -ilike "*$($exception.azObjectNameLike)*")
+                    }
+
+                    if ($spnMatch -and $azObjectMatch -and
+                        ($lineItem.PrivRole -eq $exception.role) -and
+                        ($lineItem.ObjectType -eq $exception.azScopeType) -and
+                        ($lineItem.AppEONID -eq $exception.spnEonid)) {
+                        $AP_Number = $exception.ActionPlan
+                        $Due_Date = $exception.expiration_date
+                        break  # Stop at the first AP match
+                    }
+                }
+            }
+
+            # Add AP fields dynamically
+            $line = $lineItem | Select-Object *
+            $line | Add-Member -MemberType NoteProperty -Name "AP_Number" -Value $AP_Number -Force
+            $line | Add-Member -MemberType NoteProperty -Name "Due_Date" -Value $Due_Date -Force
+            $finalDataset += $line
+        }
+
+        # Step 3: Output results
         if ($outputAsCsv) {
-            $filteredDataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
+            $finalDataset | Export-Csv -Path $outputCsvPath -NoTypeInformation
             Write-Host "Filtered dataset saved to: $outputCsvPath"
         } else {
-            return $filteredDataset
+            return $finalDataset
         }
     }
     catch {
