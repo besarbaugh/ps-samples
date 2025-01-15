@@ -1,8 +1,79 @@
-# Replace with your actual client ID
-$clientId = "<your-client-id>"
+Project Summary:
 
-# Use az rest to query Microsoft Graph API for the Service Principal
-$servicePrincipal = az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals?filter=appId eq '$clientId'" --query "value[0].id" --output tsv
+1. REPOSITORY PURPOSE:
+   - Centralized management of custom RBAC (Role-Based Access Control) roles.
+   - Automates the provisioning and maintenance of roles across environments.
 
-# Output the object ID
-$servicePrincipal
+2. TOOLS AND TECHNOLOGIES:
+   - **Bitbucket**: Version control for Terraform code.
+   - **Terraform**: Infrastructure-as-Code (IaC) tool to define and manage RBAC roles.
+   - **Jenkins**: CI/CD pipeline to automate the deployment of RBAC changes.
+
+3. WORKFLOW OVERVIEW:
+   - **Bitbucket**:
+     a. Developers commit changes to Terraform code defining RBAC roles.
+     b. Code reviews and approvals ensure changes are validated before deployment.
+   - **Jenkins Pipeline**:
+     a. Triggered by code commits or pull request merges.
+     b. Validates Terraform configurations (e.g., `terraform validate`, `terraform plan`).
+     c. Applies approved changes to the target environment (`terraform apply`).
+   - **Terraform**:
+     a. Manages RBAC roles as code, ensuring consistency across environments.
+     b. Uses state files to track deployed roles and updates.
+
+4. ENVIRONMENT MANAGEMENT:
+   - Separate branches or workspaces for development, staging, and production.
+   - Jenkins pipeline ensures changes are promoted through environments sequentially.
+
+5. SECURITY CONSIDERATIONS:
+   - Role definitions are stored securely in the repository with access controls.
+   - Sensitive information (e.g., credentials, state files) is handled using secure storage mechanisms.
+   - Automated testing and manual reviews ensure RBAC changes do not introduce over-permissive roles.
+
+6. AUDITABILITY:
+   - All role changes are versioned in Bitbucket.
+   - Jenkins logs and Terraform state files provide traceability for deployments.
+
+
+Core Commands Executing Changes:
+
+START
+1. SCRIPT PURPOSE:
+   - Automates deployment for Azure subscriptions (e.g., msdev, msad, msqa).
+   - Restricts deployment actions to specific authorized subscriptions.
+   - Integrates securely with SCV (Secret Certificate Vault) to retrieve sensitive credentials.
+
+2. ENVIRONMENT SETUP:
+   - Configure Terraform version and plugin directories.
+   - Set proxy for network access (if required).
+   - Define state file directory for Terraform.
+
+3. ERROR HANDLING:
+   - Display warnings and errors in color-coded messages.
+   - Abort execution if required parameters (e.g., tenant name) are missing.
+
+4. PARAMETER VALIDATION:
+   - Parse user input for tenant name and action (plan/apply).
+   - Validate tenant selection (e.g., msdev, msad, msqa).
+
+5. TENANT CONFIGURATION:
+   - Set environment variables specific to the chosen tenant (e.g., subscription ID, namespace, service principal).
+   - Generate temporary credentials using OpenSSL.
+   - **SCV Integration:**
+     a. Call SCV API to retrieve client certificate and password.
+     b. Use namespace and key to fetch certificate file (`pfx`) securely.
+     c. Decode and store the certificate temporarily for Terraform authentication.
+
+6. DEBUG MODE (Optional):
+   - Print environment variables and SCV-retrieved credential paths for debugging.
+
+7. TERRAFORM OPERATIONS:
+   - Initialize Terraform using the retrieved credentials and plugin directory.
+   - Perform requested action:
+     a. "Plan" - Generate and review Terraform plan.
+     b. "Apply" - Execute Terraform changes with auto-approval.
+
+8. CLEANUP:
+   - Delete temporary certificate and credentials retrieved from SCV to prevent exposure.
+
+END
